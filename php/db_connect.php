@@ -1,5 +1,6 @@
 <?php
 // Shared DB connection — require_once from each endpoint
+// DI v1.0
 define('DB_HOST', '%%DB_HOST%%');
 define('DB_NAME', '%%DB_NAME%%');
 define('DB_USER', '%%DB_USER%%');
