@@ -1,0 +1,1 @@
+# Damsgaard Invitational\n\nAnnual Ryder Cup-style golf tournament — Red vs Blue.\n\nSite: [di.labanos.dk](https://di.labanos.dk)\n
