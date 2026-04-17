@@ -28,6 +28,14 @@ function HistoryView() {
 
   const years = Object.keys(summary).sort((a, b) => b - a);
 
+  // Pre-compute the outright winner per year (null = tie)
+  const outright = {};
+  years.forEach(y => {
+    const bp = (summary[y]?.blue?.points || 0) / 2;
+    const rp = (summary[y]?.red?.points  || 0) / 2;
+    outright[y] = bp > rp ? 'blue' : rp > bp ? 'red' : null;
+  });
+
   return (
     <div className="max-w-3xl mx-auto p-4 space-y-3">
       {years.map(year => {
@@ -35,7 +43,16 @@ function HistoryView() {
         const red  = summary[year]?.red  || {};
         const bp = (blue.points || 0) / 2;
         const rp = (red.points  || 0) / 2;
-        const winner = bp > rp ? 'blue' : rp > bp ? 'red' : null;
+        const winner = outright[year];
+
+        // Ryder Cup rule: a tie means the previous holder retains
+        let holder   = winner;
+        let retains  = false;
+        if (!winner) {
+          const prevWinner = outright[String(parseInt(year) - 1)];
+          if (prevWinner) { holder = prevWinner; retains = true; }
+        }
+
         return (
           <div key={year} className="bg-white rounded-2xl shadow-sm overflow-hidden">
             <button className="w-full px-6 py-4 flex items-center justify-between hover:bg-slate-50 transition-colors"
@@ -45,10 +62,10 @@ function HistoryView() {
                 <span className={`text-xl font-black mono ${winner === 'blue' ? 'text-blue-600' : 'text-slate-400'}`}>{fmtPts(bp)}</span>
                 <span className="text-slate-300">–</span>
                 <span className={`text-xl font-black mono ${winner === 'red'  ? 'text-red-600'  : 'text-slate-400'}`}>{fmtPts(rp)}</span>
-                {winner && (
+                {holder && (
                   <span className={`text-xs font-bold px-2 py-0.5 rounded ${
-                    winner === 'blue' ? 'bg-blue-100 text-blue-700' : 'bg-red-100 text-red-700'
-                  }`}>{TEAM[winner].label} wins</span>
+                    holder === 'blue' ? 'bg-blue-100 text-blue-700' : 'bg-red-100 text-red-700'
+                  }`}>{TEAM[holder].label} {retains ? 'retains' : 'wins'}</span>
                 )}
                 <span className="text-slate-300 text-xs">{selYear === year ? '▲' : '▼'}</span>
               </div>
