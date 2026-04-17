@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DI Admin</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen">
+
+  <!-- Password Gate -->
+  <div id="auth-gate" class="flex items-center justify-center min-h-screen">
+    <div class="bg-white rounded-2xl shadow-lg p-8 w-80">
+      <div class="text-center mb-6">
+        <div class="text-4xl mb-2">⛳</div>
+        <h1 class="text-2xl font-bold">DI Admin</h1>
+        <p class="text-gray-500 text-sm mt-1">Damsgaard Invitational</p>
+      </div>
+      <input id="pw-input" type="password" placeholder="Password"
+        class="w-full border rounded-lg px-3 py-2 mb-3 focus:outline-none focus:ring-2 focus:ring-blue-500">
+      <button onclick="checkPassword()"
+        class="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-4 py-2 font-semibold transition">
+        Enter
+      </button>
+      <p id="pw-error" class="text-red-500 text-sm mt-2 text-center hidden">Wrong password</p>
+    </div>
+  </div>
+
+  <!-- Admin App -->
+  <div id="admin-app" class="hidden">
+    <header class="bg-white shadow-sm sticky top-0 z-10">
+      <div class="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <span class="text-2xl">⛳</span>
+          <h1 class="text-xl font-bold">DI Admin</h1>
+        </div>
+        <span id="save-all-status" class="text-sm text-gray-500"></span>
+      </div>
+    </header>
+
+    <main class="max-w-4xl mx-auto px-4 py-6">
+
+      <!-- Year / Round Selector -->
+      <div class="bg-white rounded-2xl shadow p-4 mb-6 flex flex-wrap gap-4 items-end">
+        <div>
+          <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Year</label>
+          <select id="year-select" class="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <option>2019</option><option>2020</option><option>2021</option>
+            <option>2022</option><option>2023</option><option>2024</option>
+            <option selected>2025</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Round</label>
+          <select id="round-select" class="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <option value="1">Round 1</option>
+            <option value="2">Round 2</option>
+            <option value="3">Round 3</option>
+            <option value="4">Round 4 — Singles</option>
+          </select>
+        </div>
+        <button onclick="loadMatches()"
+          class="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-5 py-2 text-sm font-semibold transition">
+          Load Matches
+        </button>
+        <div id="format-badge" class="hidden">
+          <span class="bg-blue-50 text-blue-700 border border-blue-200 px-3 py-2 rounded-lg text-sm font-medium" id="format-text"></span>
+        </div>
+      </div>
+
+      <!-- Loading indicator -->
+      <div id="loading" class="hidden text-center py-12 text-gray-400">
+        <div class="text-4xl mb-2">⏳</div>
+        <p>Loading matches…</p>
+      </div>
+
+      <!-- Matches -->
+      <div id="matches-container" class="space-y-4"></div>
+
+      <!-- Add match -->
+      <button id="add-match-btn" onclick="addMatch()"
+        class="hidden mt-6 w-full border-2 border-dashed border-gray-300 hover:border-blue-400 text-gray-500 hover:text-blue-600 rounded-xl py-3 text-sm font-medium transition">
+        + Add Match
+      </button>
+
+    </main>
+  </div>
+
+  <script>
+    // ── Config ──────────────────────────────────────────────────────────────
+    const ADMIN_PASSWORD = 'damsgaard'; // change this if you want
+    const API = 'https://labanos.dk/di';
+
+    // ── State ────────────────────────────────────────────────────────────────
+    let bluePlayers = [];
+    let redPlayers  = [];
+    let currentMatches = [];
+    let currentFormat  = '';
+    let currentYear    = 2025;
+    let currentRound   = 4;
+
+    // ── Auth ─────────────────────────────────────────────────────────────────
+    function checkPassword() {
+      if (document.getElementById('pw-input').value === ADMIN_PASSWORD) {
+        document.getElementById('auth-gate').classList.add('hidden');
+        document.getElementById('admin-app').classList.remove('hidden');
+        init();
+      } else {
+        document.getElementById('pw-error').classList.remove('hidden');
+      }
+    }
+    document.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('pw-input').addEventListener('keydown', e => {
+        if (e.key === 'Enter') checkPassword();
+      });
+    });
+
+    // ── Init: load players ───────────────────────────────────────────────────
+    async function init() {
+      const res = await fetch(`${API}/players.php`);
+      const all = await res.json();
+      bluePlayers = all.filter(p => p.team === 'blue').sort((a,b) => a.name.localeCompare(b.name));
+      redPlayers  = all.filter(p => p.team === 'red').sort((a,b) => a.name.localeCompare(b.name));
+    }
+
+    // ── Load matches for selected year+round ─────────────────────────────────
+    async function loadMatches() {
+      currentYear  = parseInt(document.getElementById('year-select').value);
+      currentRound = parseInt(document.getElementById('round-select').value);
+
+      document.getElementById('loading').classList.remove('hidden');
+      document.getElementById('matches-container').innerHTML = '';
+      document.getElementById('add-match-btn').classList.add('hidden');
+      document.getElementById('format-badge').classList.add('hidden');
+
+      const res = await fetch(`${API}/admin.php?year=${currentYear}&round=${currentRound}`);
+      currentMatches = await res.json();
+
+      document.getElementById('loading').classList.add('hidden');
+
+      if (currentMatches.length > 0) {
+        currentFormat = currentMatches[0].format;
+        document.getElementById('format-text').textContent = currentFormat.charAt(0).toUpperCase() + currentFormat.slice(1);
+        document.getElementById('format-badge').classList.remove('hidden');
+      }
+
+      renderMatches();
+      document.getElementById('add-match-btn').classList.remove('hidden');
+    }
+
+    // ── Helpers ──────────────────────────────────────────────────────────────
+    function playerOptions(pool, selectedName = '') {
+      let html = '<option value="">— select player —</option>';
+      pool.forEach(p => {
+        html += `<option${p.name === selectedName ? ' selected' : ''}>${escHtml(p.name)}</option>`;
+      });
+      return html;
+    }
+
+    function escHtml(s) {
+      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function matchResult(results) {
+      if (!results || results.length === 0) return { winner: '', ups: '' };
+      const b = results.find(r => r.team === 'blue');
+      if (!b) return { winner: '', ups: '' };
+      const winner = b.points == 2 ? 'blue' : b.points == 0 ? 'red' : 'halved';
+      return { winner, ups: Math.abs(b.ups) };
+    }
+
+    // ── Render all match cards ───────────────────────────────────────────────
+    function renderMatches() {
+      const container = document.getElementById('matches-container');
+      container.innerHTML = '';
+      currentMatches.forEach(m => container.appendChild(buildCard(m)));
+    }
+
+    function buildCard(match) {
+      const isSingles  = match.format === 'singles';
+      const { winner, ups } = matchResult(match.results);
+      const blues = (match.results || []).filter(r => r.team === 'blue');
+      const reds  = (match.results || []).filter(r => r.team === 'red');
+      const b1 = blues[0]?.player_name || '';
+      const b2 = blues[1]?.player_name || '';
+      const r1 = reds[0]?.player_name  || '';
+      const r2 = reds[1]?.player_name  || '';
+      const hasData = match.results && match.results.length > 0;
+
+      const card = document.createElement('div');
+      card.className = 'bg-white rounded-2xl shadow p-5';
+      card.dataset.matchNumber = match.match_number;
+
+      // Result options
+      const resultOpts = `
+        <option value="">— result —</option>
+        <option value="blue"${ winner==='blue'   ? ' selected':''}>🔵 Blue wins</option>
+        <option value="red"${  winner==='red'    ? ' selected':''}>🔴 Red wins</option>
+        <option value="halved"${winner==='halved'? ' selected':''}>🤝 Halved</option>
+      `;
+
+      card.innerHTML = `
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="font-bold text-lg">Match ${match.match_number}</h3>
+          <span class="match-badge text-xs px-2 py-1 rounded-full font-medium ${hasData
+            ? 'bg-green-100 text-green-700'
+            : 'bg-gray-100 text-gray-500'}">
+            ${hasData ? '✓ Saved' : 'Empty'}
+          </span>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4 mb-4">
+          <div class="space-y-2">
+            <p class="text-xs font-bold text-blue-600 uppercase tracking-wide">🔵 Blue</p>
+            <select class="w-full border rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 blue1">
+              ${playerOptions(bluePlayers, b1)}
+            </select>
+            ${!isSingles ? `
+            <select class="w-full border rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 blue2">
+              ${playerOptions(bluePlayers, b2)}
+            </select>` : ''}
+          </div>
+          <div class="space-y-2">
+            <p class="text-xs font-bold text-red-600 uppercase tracking-wide">🔴 Red</p>
+            <select class="w-full border rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400 red1">
+              ${playerOptions(redPlayers, r1)}
+            </select>
+            ${!isSingles ? `
+            <select class="w-full border rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400 red2">
+              ${playerOptions(redPlayers, r2)}
+            </select>` : ''}
+          </div>
+        </div>
+
+        <div class="flex items-end gap-4 mb-4">
+          <div class="flex-1">
+            <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Result</label>
+            <select class="w-full border rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 result-select">
+              ${resultOpts}
+            </select>
+          </div>
+          <div class="w-28">
+            <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">UPs (margin)</label>
+            <input type="number" min="0" max="18" value="${ups}"
+              placeholder="0"
+              class="w-full border rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 ups-input">
+          </div>
+        </div>
+
+        <div class="flex items-center gap-3">
+          <button onclick="saveMatch(this)"
+            class="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-4 py-2 text-sm font-semibold transition">
+            Save Match
+          </button>
+          <span class="save-status text-sm"></span>
+        </div>
+      `;
+      return card;
+    }
+
+    // ── Add a new (empty) match card ─────────────────────────────────────────
+    function addMatch() {
+      const maxNum = currentMatches.reduce((m, x) => Math.max(m, x.match_number), 0);
+      const newMatch = { match_id: null, match_number: maxNum + 1, format: currentFormat, results: [] };
+      currentMatches.push(newMatch);
+      const container = document.getElementById('matches-container');
+      container.appendChild(buildCard(newMatch));
+      // Scroll to it
+      container.lastElementChild.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    // ── Save a single match ──────────────────────────────────────────────────
+    async function saveMatch(btn) {
+      const card    = btn.closest('[data-match-number]');
+      const matchNo = parseInt(card.dataset.matchNumber);
+      const isSingles = currentFormat === 'singles';
+
+      const b1     = card.querySelector('.blue1').value;
+      const r1     = card.querySelector('.red1').value;
+      const b2     = isSingles ? '' : card.querySelector('.blue2').value;
+      const r2     = isSingles ? '' : card.querySelector('.red2').value;
+      const winner = card.querySelector('.result-select').value;
+      const ups    = parseInt(card.querySelector('.ups-input').value) || 0;
+      const status = card.querySelector('.save-status');
+
+      // Validate
+      if (!b1 || !r1 || !winner) {
+        status.textContent = '⚠ Please fill in all required fields';
+        status.className = 'save-status text-sm text-yellow-600';
+        return;
+      }
+      if (!isSingles && (!b2 || !r2)) {
+        status.textContent = '⚠ Please select both players per team';
+        status.className = 'save-status text-sm text-yellow-600';
+        return;
+      }
+      if (b1 === b2 || r1 === r2) {
+        status.textContent = '⚠ Same player selected twice on a team';
+        status.className = 'save-status text-sm text-yellow-600';
+        return;
+      }
+
+      // Build players array
+      let players;
+      if (isSingles) {
+        players = [
+          { name: b1, team: 'blue' },
+          { name: r1, team: 'red'  },
+        ];
+      } else {
+        players = [
+          { name: b1, team: 'blue', partner_name: b2 },
+          { name: b2, team: 'blue', partner_name: b1 },
+          { name: r1, team: 'red',  partner_name: r2 },
+          { name: r2, team: 'red',  partner_name: r1 },
+        ];
+      }
+
+      btn.disabled = true;
+      status.textContent = 'Saving…';
+      status.className = 'save-status text-sm text-gray-400';
+
+      try {
+        const res = await fetch(`${API}/admin.php`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            year: currentYear,
+            round_number: currentRound,
+            match_number: matchNo,
+            winner,
+            ups,
+            players,
+          }),
+        });
+        const data = await res.json();
+
+        if (data.ok) {
+          status.textContent = '✓ Saved!';
+          status.className = 'save-status text-sm text-green-600';
+          // Update badge
+          const badge = card.querySelector('.match-badge');
+          badge.textContent = '✓ Saved';
+          badge.className = 'match-badge text-xs px-2 py-1 rounded-full font-medium bg-green-100 text-green-700';
+        } else {
+          status.textContent = '✗ ' + (data.error || 'Unknown error');
+          status.className = 'save-status text-sm text-red-600';
+        }
+      } catch (e) {
+        status.textContent = '✗ Network error';
+        status.className = 'save-status text-sm text-red-600';
+      }
+
+      btn.disabled = false;
+    }
+  </script>
+</body>
+</html>
