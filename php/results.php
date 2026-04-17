@@ -35,19 +35,27 @@ if ($year) {
     $stmt->execute([$year]);
     echo json_encode($stmt->fetchAll());
 } else {
+    // Use a subquery to get one result row per match per team (MAX deduplicates
+    // fourball/greensome/foursome where 2 players each have the same points).
+    // DB stores points doubled (2=win, 1=halved, 0=loss); history.js divides by 2.
     $stmt = $pdo->query("
-        SELECT
-            t.year,
-            p.team,
-            SUM(mr.points) AS team_points,
-            SUM(mr.ups)    AS team_ups
-        FROM tournaments t
-        JOIN rounds r         ON r.tournament_id = t.id
-        JOIN matches m        ON m.round_id = r.id
-        JOIN match_results mr ON mr.match_id = m.id
-        JOIN players p        ON p.id = mr.player_id
-        GROUP BY t.year, p.team
-        ORDER BY t.year ASC
+        SELECT year, team, SUM(match_pts) AS team_points, SUM(match_ups) AS team_ups
+        FROM (
+            SELECT
+                t.year,
+                p.team,
+                m.id                AS match_id,
+                MAX(mr.points)      AS match_pts,
+                MAX(ABS(mr.ups))    AS match_ups
+            FROM tournaments t
+            JOIN rounds r         ON r.tournament_id = t.id
+            JOIN matches m        ON m.round_id = r.id
+            JOIN match_results mr ON mr.match_id = m.id
+            JOIN players p        ON p.id = mr.player_id
+            GROUP BY t.year, p.team, m.id
+        ) per_match
+        GROUP BY year, team
+        ORDER BY year ASC
     ");
     $rows = $stmt->fetchAll();
     $out  = [];
