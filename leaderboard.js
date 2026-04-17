@@ -60,12 +60,12 @@ function LeaderboardView() {
                   </div>
                 </td>
                 <td className="px-4 py-3 text-right mono text-slate-500">{p.matches_played}</td>
-                <td className="px-4 py-3 text-right mono font-bold text-slate-800">{p.total_points}</td>
+                <td className="px-4 py-3 text-right mono font-bold text-slate-800">{fmtPts(p.total_points)}</td>
                 <td className="px-4 py-3 text-right mono text-green-600">{p.wins}</td>
                 <td className="px-4 py-3 text-right mono text-amber-500">{p.halves}</td>
                 <td className="px-4 py-3 text-right mono text-slate-400">{p.losses}</td>
                 <td className="px-4 py-3 text-right mono text-slate-500">{p.total_ups}</td>
-                <td className="px-4 py-3 text-right mono text-slate-600">{p.avg_points}</td>
+                <td className="px-4 py-3 text-right mono text-slate-600">{fmtAvg(p.avg_points)}</td>
               </tr>
             ))}
           </tbody>
