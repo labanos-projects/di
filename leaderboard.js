@@ -99,43 +99,45 @@ function LeaderboardView() {
         {!data
           ? <div className="py-12 flex justify-center"><Spinner /></div>
           : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-slate-100">
-                <th className="px-4 py-3 text-left text-xs text-slate-400 uppercase tracking-wide w-8">#</th>
-                <Th col="name"           label="Player"  right={false} />
-                <Th col="matches_played" label="M" />
-                <Th col="total_points"   label="Pts" />
-                <Th col="wins"           label="W" />
-                <Th col="halves"         label="H" />
-                <Th col="losses"         label="L" />
-                <Th col="total_ups"      label="UPs" />
-                <Th col="avg_points"     label="Avg" />
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((p, i) => (
-                <tr key={p.id}
-                  className="border-b border-slate-50 hover:bg-slate-50 cursor-pointer"
-                  onClick={() => window.dispatchEvent(new CustomEvent('navigate', { detail: { view: 'player', id: p.id } }))}>
-                  <td className="px-4 py-3 text-slate-400 mono">{i + 1}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <span className={`w-2 h-2 rounded-full flex-shrink-0 ${p.team === 'blue' ? 'bg-blue-500' : 'bg-red-500'}`} />
-                      <span className="font-medium text-slate-800">{p.name}</span>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-right mono text-slate-500">{p.matches_played}</td>
-                  <td className="px-4 py-3 text-right mono font-bold text-slate-800">{fmtPts(p.total_points)}</td>
-                  <td className="px-4 py-3 text-right mono text-green-600">{p.wins}</td>
-                  <td className="px-4 py-3 text-right mono text-amber-500">{p.halves}</td>
-                  <td className="px-4 py-3 text-right mono text-slate-400">{p.losses}</td>
-                  <td className="px-4 py-3 text-right mono text-slate-500">{p.total_ups}</td>
-                  <td className="px-4 py-3 text-right mono text-slate-600">{fmtAvg(p.avg_points)}</td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-100">
+                  <th className="px-4 py-3 text-left text-xs text-slate-400 uppercase tracking-wide w-8">#</th>
+                  <Th col="name"           label="Player"  right={false} />
+                  <Th col="matches_played" label="M" />
+                  <Th col="total_points"   label="Pts" />
+                  <Th col="wins"           label="W" />
+                  <Th col="halves"         label="H" />
+                  <Th col="losses"         label="L" />
+                  <Th col="total_ups"      label="UPs" />
+                  <Th col="avg_points"     label="Avg" />
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {rows.map((p, i) => (
+                  <tr key={p.id}
+                    className="border-b border-slate-50 hover:bg-slate-50 cursor-pointer"
+                    onClick={() => window.dispatchEvent(new CustomEvent('navigate', { detail: { view: 'player', id: p.id } }))}>
+                    <td className="px-4 py-3 text-slate-400 mono">{i + 1}</td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <div className="flex items-center gap-2">
+                        <span className={`w-2 h-2 rounded-full flex-shrink-0 ${p.team === 'blue' ? 'bg-blue-500' : 'bg-red-500'}`} />
+                        <span className="font-medium text-slate-800">{p.name}</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-right mono text-slate-500">{p.matches_played}</td>
+                    <td className="px-4 py-3 text-right mono font-bold text-slate-800">{fmtPts(p.total_points)}</td>
+                    <td className="px-4 py-3 text-right mono text-green-600">{p.wins}</td>
+                    <td className="px-4 py-3 text-right mono text-amber-500">{p.halves}</td>
+                    <td className="px-4 py-3 text-right mono text-slate-400">{p.losses}</td>
+                    <td className="px-4 py-3 text-right mono text-slate-500">{p.total_ups}</td>
+                    <td className="px-4 py-3 text-right mono text-slate-600">{fmtAvg(p.avg_points)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </div>
