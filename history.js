@@ -42,9 +42,9 @@ function HistoryView() {
                     onClick={() => loadYear(year)}>
               <span className="text-lg font-bold text-slate-800">{year}</span>
               <div className="flex items-center gap-4">
-                <span className={`text-xl font-black mono ${winner === 'blue' ? 'text-blue-600' : 'text-slate-400'}`}>{bp}</span>
+                <span className={`text-xl font-black mono ${winner === 'blue' ? 'text-blue-600' : 'text-slate-400'}`}>{fmtPts(bp)}</span>
                 <span className="text-slate-300">–</span>
-                <span className={`text-xl font-black mono ${winner === 'red'  ? 'text-red-600'  : 'text-slate-400'}`}>{rp}</span>
+                <span className={`text-xl font-black mono ${winner === 'red'  ? 'text-red-600'  : 'text-slate-400'}`}>{fmtPts(rp)}</span>
                 {winner && (
                   <span className={`text-xs font-bold px-2 py-0.5 rounded ${
                     winner === 'blue' ? 'bg-blue-100 text-blue-700' : 'bg-red-100 text-red-700'
