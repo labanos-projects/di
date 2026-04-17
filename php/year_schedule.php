@@ -1,5 +1,5 @@
 <?php
-// GET /php/year_schedule.php?year=YYYY
+// GET /php/year_schedule.php?year=YYYY — v2
 // Returns rounds with match results (players, points, ups) for a given year.
 // If a round has no matches yet, its matches array is empty.
 header('Content-Type: application/json');
