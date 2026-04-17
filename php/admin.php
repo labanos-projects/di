@@ -1,14 +1,16 @@
 <?php
 // Admin endpoint — match results + player management
-// GET  ?year=X&round=Y          -> match slots for that round
 // GET  ?action=players          -> all players
+// GET  ?action=years            -> all tournament years
+// GET  ?year=X&round=Y          -> match slots for that round
+// POST {action:'add_year'}      -> create tournament + rounds for a new year
 // POST {action:'add_player'}    -> create player
 // POST {action:'update_player'} -> rename / change team
 // POST {action:'merge_players'} -> reassign results from merge_id -> keep_id, delete merge_id
 // POST {action:'delete_player'} -> delete player (only if no results)
 // POST {action:'delete_match'}  -> delete match and all its results
 // POST (no action)              -> replace match results (creates match row if needed)
-// v1.5
+// v1.6
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
@@ -22,10 +24,19 @@ $method = $_SERVER['REQUEST_METHOD'];
 // ── GET ──────────────────────────────────────────────────────────────────────
 if ($method === 'GET') {
 
+    $action = $_GET['action'] ?? '';
+
     // Player list
-    if (($_GET['action'] ?? '') === 'players') {
+    if ($action === 'players') {
         $stmt = $pdo->query("SELECT id, name, team, active FROM players ORDER BY team, name");
         echo json_encode($stmt->fetchAll());
+        exit;
+    }
+
+    // All tournament years (for populating the year dropdown)
+    if ($action === 'years') {
+        $stmt = $pdo->query("SELECT year FROM tournaments ORDER BY year DESC");
+        echo json_encode($stmt->fetchAll(PDO::FETCH_COLUMN));
         exit;
     }
 
@@ -87,6 +98,44 @@ if ($method === 'GET') {
 if ($method === 'POST') {
     $data   = json_decode(file_get_contents('php://input'), true);
     $action = $data['action'] ?? '';
+
+    // ── Add year (tournament + rounds) ────────────────────────────────────────
+    if ($action === 'add_year') {
+        $year   = (int)($data['year']   ?? 0);
+        $rounds = $data['rounds']       ?? [];
+        $valid_formats = ['fourball','greensome','foursome','singles'];
+
+        if (!$year || empty($rounds)) {
+            http_response_code(400);
+            echo json_encode(['error' => 'year and rounds required']);
+            exit;
+        }
+
+        // Check year doesn't already exist
+        $stmt = $pdo->prepare("SELECT id FROM tournaments WHERE year = ?");
+        $stmt->execute([$year]);
+        if ($stmt->fetch()) {
+            http_response_code(409);
+            echo json_encode(['error' => "Year $year already exists"]);
+            exit;
+        }
+
+        // Create tournament
+        $pdo->prepare("INSERT INTO tournaments (year) VALUES (?)")->execute([$year]);
+        $tournament_id = (int)$pdo->lastInsertId();
+
+        // Create rounds
+        $stmt = $pdo->prepare("INSERT INTO rounds (tournament_id, round_number, format) VALUES (?, ?, ?)");
+        foreach ($rounds as $r) {
+            $rn  = (int)($r['round_number'] ?? 0);
+            $fmt = $r['format'] ?? '';
+            if (!$rn || !in_array($fmt, $valid_formats)) continue;
+            $stmt->execute([$tournament_id, $rn, $fmt]);
+        }
+
+        echo json_encode(['ok' => true, 'tournament_id' => $tournament_id]);
+        exit;
+    }
 
     // ── Add player ────────────────────────────────────────────────────────────
     if ($action === 'add_player') {
@@ -223,7 +272,7 @@ if ($method === 'POST') {
         $round_row = $stmt2->fetch();
         if (!$round_row) {
             http_response_code(404);
-            echo json_encode(['error' => "Round not found: year=$year round=$round_number"]);
+            echo json_encode(['error' => "Round not found: year=$year round=$round_number. Create the year first."]);
             exit;
         }
         $pdo->prepare("INSERT INTO matches (round_id, match_number) VALUES (?, ?)")
@@ -274,7 +323,6 @@ if ($method === 'POST') {
         $stmt->execute($r);
     }
 
-    // Return match_id so the UI can update the card's dataset for subsequent deletes
     echo json_encode(['ok' => true, 'match_id' => $match_id]);
     exit;
 }
