@@ -6,8 +6,9 @@
 // POST {action:'update_player'} -> rename / change team
 // POST {action:'merge_players'} -> reassign results from merge_id -> keep_id, delete merge_id
 // POST {action:'delete_player'} -> delete player (only if no results)
+// POST {action:'delete_match'}  -> delete match and all its results
 // POST (no action)              -> replace match results
-// v1.3
+// v1.4
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
@@ -176,6 +177,20 @@ if ($method === 'POST') {
             exit;
         }
         $pdo->prepare("DELETE FROM players WHERE id = ?")->execute([$id]);
+        echo json_encode(['ok' => true]);
+        exit;
+    }
+
+    // ── Delete match ──────────────────────────────────────────────────────────
+    if ($action === 'delete_match') {
+        $match_id = (int)($data['match_id'] ?? 0);
+        if (!$match_id) {
+            http_response_code(400);
+            echo json_encode(['error' => 'match_id required']);
+            exit;
+        }
+        $pdo->prepare("DELETE FROM match_results WHERE match_id = ?")->execute([$match_id]);
+        $pdo->prepare("DELETE FROM matches WHERE id = ?")->execute([$match_id]);
         echo json_encode(['ok' => true]);
         exit;
     }
