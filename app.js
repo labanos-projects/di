@@ -1,12 +1,13 @@
 // ─── Main App ─────────────────────────────────────────────────────────────────
 
 const TABS = [
-  { id: 'leaderboard', label: 'Leaderboard' },
-  { id: 'history',     label: 'History'     },
+  { id: 'thisyear',    label: String(THIS_YEAR) },
+  { id: 'leaderboard', label: 'Leaderboard'     },
+  { id: 'history',     label: 'History'         },
 ];
 
 function App() {
-  const [tab, setTab]           = React.useState('leaderboard');
+  const [tab, setTab]           = React.useState('thisyear');
   const [playerView, setPlayer] = React.useState(null);
 
   React.useEffect(() => {
@@ -24,7 +25,7 @@ function App() {
         <div className="max-w-3xl mx-auto px-4">
           <div className="flex items-center justify-between py-3">
             <button
-              onClick={() => { setTab('leaderboard'); setPlayer(null); }}
+              onClick={() => { setTab('thisyear'); setPlayer(null); }}
               className="block">
               <img
                 src="damsgaard-invitational-logo.jpeg"
@@ -53,6 +54,7 @@ function App() {
       <div className="py-4">
         {playerView
           ? <PlayerView playerId={playerView.id} onBack={() => setPlayer(null)} />
+          : tab === 'thisyear'    ? <ThisYearView />
           : tab === 'leaderboard' ? <LeaderboardView />
           : tab === 'history'     ? <HistoryView />
           : null
