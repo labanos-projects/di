@@ -34,13 +34,23 @@
           <span class="text-2xl">⛳</span>
           <h1 class="text-xl font-bold">DI Admin</h1>
         </div>
-        <span id="save-all-status" class="text-sm text-gray-500"></span>
+        <!-- Tabs -->
+        <div class="flex gap-1">
+          <button onclick="showTab('matches')" id="tab-matches"
+            class="tab-btn px-4 py-1.5 rounded-lg text-sm font-semibold bg-blue-600 text-white transition">
+            Matches
+          </button>
+          <button onclick="showTab('players')" id="tab-players"
+            class="tab-btn px-4 py-1.5 rounded-lg text-sm font-semibold text-gray-500 hover:bg-gray-100 transition">
+            Players
+          </button>
+        </div>
       </div>
     </header>
 
-    <main class="max-w-4xl mx-auto px-4 py-6">
+    <!-- ── MATCHES TAB ─────────────────────────────────────────────────── -->
+    <div id="tab-matches-content" class="max-w-4xl mx-auto px-4 py-6">
 
-      <!-- Year / Round Selector -->
       <div class="bg-white rounded-2xl shadow p-4 mb-6 flex flex-wrap gap-4 items-end">
         <div>
           <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Year</label>
@@ -64,42 +74,81 @@
           Load Matches
         </button>
         <div id="format-badge" class="hidden">
-          <span class="bg-blue-50 text-blue-700 border border-blue-200 px-3 py-2 rounded-lg text-sm font-medium" id="format-text"></span>
+          <span id="format-text" class="bg-blue-50 text-blue-700 border border-blue-200 px-3 py-2 rounded-lg text-sm font-medium"></span>
         </div>
       </div>
 
-      <!-- Loading indicator -->
       <div id="loading" class="hidden text-center py-12 text-gray-400">
-        <div class="text-4xl mb-2">⏳</div>
-        <p>Loading matches…</p>
+        <div class="text-4xl mb-2">⏳</div><p>Loading matches…</p>
       </div>
-
-      <!-- Matches -->
       <div id="matches-container" class="space-y-4"></div>
-
-      <!-- Add match -->
       <button id="add-match-btn" onclick="addMatch()"
         class="hidden mt-6 w-full border-2 border-dashed border-gray-300 hover:border-blue-400 text-gray-500 hover:text-blue-600 rounded-xl py-3 text-sm font-medium transition">
         + Add Match
       </button>
+    </div>
 
-    </main>
+    <!-- ── PLAYERS TAB ─────────────────────────────────────────────────── -->
+    <div id="tab-players-content" class="hidden max-w-4xl mx-auto px-4 py-6">
+
+      <!-- Add player -->
+      <div class="bg-white rounded-2xl shadow p-4 mb-6">
+        <h2 class="font-semibold text-sm uppercase tracking-wide text-gray-500 mb-3">Add New Player</h2>
+        <div class="flex gap-3 items-end">
+          <div class="flex-1">
+            <label class="block text-xs font-semibold text-gray-500 mb-1">Name</label>
+            <input id="new-player-name" type="text" placeholder="Full name"
+              class="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-500 mb-1">Team</label>
+            <select id="new-player-team" class="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+              <option value="blue">🔵 Blue</option>
+              <option value="red">🔴 Red</option>
+            </select>
+          </div>
+          <button onclick="addPlayer()"
+            class="bg-green-600 hover:bg-green-700 text-white rounded-lg px-4 py-2 text-sm font-semibold transition">
+            Add Player
+          </button>
+          <span id="add-player-status" class="text-sm"></span>
+        </div>
+      </div>
+
+      <!-- Player list -->
+      <div id="players-loading" class="hidden text-center py-12 text-gray-400">
+        <div class="text-4xl mb-2">⏳</div><p>Loading players…</p>
+      </div>
+      <div class="grid grid-cols-2 gap-6">
+        <div>
+          <h2 class="font-bold text-blue-700 mb-3 flex items-center gap-2">
+            🔵 Blue Team <span id="blue-count" class="text-xs bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full font-normal"></span>
+          </h2>
+          <div id="blue-list" class="space-y-2"></div>
+        </div>
+        <div>
+          <h2 class="font-bold text-red-700 mb-3 flex items-center gap-2">
+            🔴 Red Team <span id="red-count" class="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full font-normal"></span>
+          </h2>
+          <div id="red-list" class="space-y-2"></div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <script>
-    // ── Config ──────────────────────────────────────────────────────────────
-    const ADMIN_PASSWORD = 'damsgaard'; // change this if you want
+    const ADMIN_PASSWORD = 'damsgaard';
     const API = 'https://labanos.dk/di';
 
-    // ── State ────────────────────────────────────────────────────────────────
-    let bluePlayers = [];
-    let redPlayers  = [];
+    let allPlayers   = [];
+    let bluePlayers  = [];
+    let redPlayers   = [];
     let currentMatches = [];
     let currentFormat  = '';
     let currentYear    = 2025;
     let currentRound   = 4;
 
-    // ── Auth ─────────────────────────────────────────────────────────────────
+    // ── Auth ──────────────────────────────────────────────────────────────────
     function checkPassword() {
       if (document.getElementById('pw-input').value === ADMIN_PASSWORD) {
         document.getElementById('auth-gate').classList.add('hidden');
@@ -109,21 +158,35 @@
         document.getElementById('pw-error').classList.remove('hidden');
       }
     }
-    document.addEventListener('DOMContentLoaded', () => {
-      document.getElementById('pw-input').addEventListener('keydown', e => {
-        if (e.key === 'Enter') checkPassword();
-      });
+    document.getElementById('pw-input').addEventListener('keydown', e => {
+      if (e.key === 'Enter') checkPassword();
     });
 
-    // ── Init: load players ───────────────────────────────────────────────────
-    async function init() {
-      const res = await fetch(`${API}/players.php`);
-      const all = await res.json();
-      bluePlayers = all.filter(p => p.team === 'blue').sort((a,b) => a.name.localeCompare(b.name));
-      redPlayers  = all.filter(p => p.team === 'red').sort((a,b) => a.name.localeCompare(b.name));
+    // ── Tabs ──────────────────────────────────────────────────────────────────
+    function showTab(name) {
+      ['matches','players'].forEach(t => {
+        document.getElementById(`tab-${t}-content`).classList.toggle('hidden', t !== name);
+        const btn = document.getElementById(`tab-${t}`);
+        btn.className = t === name
+          ? 'tab-btn px-4 py-1.5 rounded-lg text-sm font-semibold bg-blue-600 text-white transition'
+          : 'tab-btn px-4 py-1.5 rounded-lg text-sm font-semibold text-gray-500 hover:bg-gray-100 transition';
+      });
+      if (name === 'players') loadPlayers();
     }
 
-    // ── Load matches for selected year+round ─────────────────────────────────
+    // ── Init ──────────────────────────────────────────────────────────────────
+    async function init() {
+      await refreshPlayerLists();
+    }
+
+    async function refreshPlayerLists() {
+      const res = await fetch(`${API}/players.php`);
+      allPlayers  = await res.json();
+      bluePlayers = allPlayers.filter(p => p.team === 'blue').sort((a,b) => a.name.localeCompare(b.name));
+      redPlayers  = allPlayers.filter(p => p.team === 'red').sort((a,b) => a.name.localeCompare(b.name));
+    }
+
+    // ── Matches tab ───────────────────────────────────────────────────────────
     async function loadMatches() {
       currentYear  = parseInt(document.getElementById('year-select').value);
       currentRound = parseInt(document.getElementById('round-select').value);
@@ -135,12 +198,12 @@
 
       const res = await fetch(`${API}/admin.php?year=${currentYear}&round=${currentRound}`);
       currentMatches = await res.json();
-
       document.getElementById('loading').classList.add('hidden');
 
       if (currentMatches.length > 0) {
         currentFormat = currentMatches[0].format;
-        document.getElementById('format-text').textContent = currentFormat.charAt(0).toUpperCase() + currentFormat.slice(1);
+        document.getElementById('format-text').textContent =
+          currentFormat.charAt(0).toUpperCase() + currentFormat.slice(1);
         document.getElementById('format-badge').classList.remove('hidden');
       }
 
@@ -148,210 +211,309 @@
       document.getElementById('add-match-btn').classList.remove('hidden');
     }
 
-    // ── Helpers ──────────────────────────────────────────────────────────────
     function playerOptions(pool, selectedName = '') {
       let html = '<option value="">— select player —</option>';
       pool.forEach(p => {
-        html += `<option${p.name === selectedName ? ' selected' : ''}>${escHtml(p.name)}</option>`;
+        html += `<option${p.name === selectedName ? ' selected' : ''}>${esc(p.name)}</option>`;
       });
       return html;
     }
 
-    function escHtml(s) {
+    function esc(s) {
       return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
 
     function matchResult(results) {
-      if (!results || results.length === 0) return { winner: '', ups: '' };
+      if (!results || !results.length) return { winner: '', ups: '' };
       const b = results.find(r => r.team === 'blue');
       if (!b) return { winner: '', ups: '' };
-      const winner = b.points == 2 ? 'blue' : b.points == 0 ? 'red' : 'halved';
-      return { winner, ups: Math.abs(b.ups) };
+      return { winner: b.points==2?'blue':b.points==0?'red':'halved', ups: Math.abs(b.ups) };
     }
 
-    // ── Render all match cards ───────────────────────────────────────────────
     function renderMatches() {
-      const container = document.getElementById('matches-container');
-      container.innerHTML = '';
-      currentMatches.forEach(m => container.appendChild(buildCard(m)));
+      const c = document.getElementById('matches-container');
+      c.innerHTML = '';
+      currentMatches.forEach(m => c.appendChild(buildMatchCard(m)));
     }
 
-    function buildCard(match) {
-      const isSingles  = match.format === 'singles';
+    function buildMatchCard(match) {
+      const isSingles = match.format === 'singles';
       const { winner, ups } = matchResult(match.results);
-      const blues = (match.results || []).filter(r => r.team === 'blue');
-      const reds  = (match.results || []).filter(r => r.team === 'red');
-      const b1 = blues[0]?.player_name || '';
-      const b2 = blues[1]?.player_name || '';
-      const r1 = reds[0]?.player_name  || '';
-      const r2 = reds[1]?.player_name  || '';
-      const hasData = match.results && match.results.length > 0;
+      const blues = (match.results||[]).filter(r => r.team==='blue');
+      const reds  = (match.results||[]).filter(r => r.team==='red');
+      const b1 = blues[0]?.player_name||'', b2 = blues[1]?.player_name||'';
+      const r1 = reds[0]?.player_name||'',  r2 = reds[1]?.player_name||'';
+      const hasData = !!(match.results && match.results.length);
 
       const card = document.createElement('div');
       card.className = 'bg-white rounded-2xl shadow p-5';
       card.dataset.matchNumber = match.match_number;
 
-      // Result options
       const resultOpts = `
         <option value="">— result —</option>
-        <option value="blue"${ winner==='blue'   ? ' selected':''}>🔵 Blue wins</option>
-        <option value="red"${  winner==='red'    ? ' selected':''}>🔴 Red wins</option>
-        <option value="halved"${winner==='halved'? ' selected':''}>🤝 Halved</option>
-      `;
+        <option value="blue"${winner==='blue'?' selected':''}>🔵 Blue wins</option>
+        <option value="red"${winner==='red'?' selected':''}>🔴 Red wins</option>
+        <option value="halved"${winner==='halved'?' selected':''}>🤝 Halved</option>`;
 
       card.innerHTML = `
         <div class="flex items-center justify-between mb-4">
           <h3 class="font-bold text-lg">Match ${match.match_number}</h3>
-          <span class="match-badge text-xs px-2 py-1 rounded-full font-medium ${hasData
-            ? 'bg-green-100 text-green-700'
-            : 'bg-gray-100 text-gray-500'}">
-            ${hasData ? '✓ Saved' : 'Empty'}
+          <span class="match-badge text-xs px-2 py-1 rounded-full font-medium ${hasData?'bg-green-100 text-green-700':'bg-gray-100 text-gray-500'}">
+            ${hasData?'✓ Saved':'Empty'}
           </span>
         </div>
-
         <div class="grid grid-cols-2 gap-4 mb-4">
           <div class="space-y-2">
             <p class="text-xs font-bold text-blue-600 uppercase tracking-wide">🔵 Blue</p>
-            <select class="w-full border rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 blue1">
-              ${playerOptions(bluePlayers, b1)}
-            </select>
-            ${!isSingles ? `
-            <select class="w-full border rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 blue2">
-              ${playerOptions(bluePlayers, b2)}
-            </select>` : ''}
+            <select class="w-full border rounded-lg px-2 py-1.5 text-sm blue1">${playerOptions(bluePlayers, b1)}</select>
+            ${!isSingles?`<select class="w-full border rounded-lg px-2 py-1.5 text-sm blue2">${playerOptions(bluePlayers, b2)}</select>`:''}
           </div>
           <div class="space-y-2">
             <p class="text-xs font-bold text-red-600 uppercase tracking-wide">🔴 Red</p>
-            <select class="w-full border rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400 red1">
-              ${playerOptions(redPlayers, r1)}
-            </select>
-            ${!isSingles ? `
-            <select class="w-full border rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400 red2">
-              ${playerOptions(redPlayers, r2)}
-            </select>` : ''}
+            <select class="w-full border rounded-lg px-2 py-1.5 text-sm red1">${playerOptions(redPlayers, r1)}</select>
+            ${!isSingles?`<select class="w-full border rounded-lg px-2 py-1.5 text-sm red2">${playerOptions(redPlayers, r2)}</select>`:''}
           </div>
         </div>
-
         <div class="flex items-end gap-4 mb-4">
           <div class="flex-1">
             <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Result</label>
-            <select class="w-full border rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 result-select">
-              ${resultOpts}
-            </select>
+            <select class="w-full border rounded-lg px-2 py-1.5 text-sm result-select">${resultOpts}</select>
           </div>
           <div class="w-28">
             <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">UPs (margin)</label>
-            <input type="number" min="0" max="18" value="${ups}"
-              placeholder="0"
-              class="w-full border rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 ups-input">
+            <input type="number" min="0" max="18" value="${ups}" placeholder="0"
+              class="w-full border rounded-lg px-2 py-1.5 text-sm ups-input">
           </div>
         </div>
-
         <div class="flex items-center gap-3">
           <button onclick="saveMatch(this)"
             class="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-4 py-2 text-sm font-semibold transition">
             Save Match
           </button>
           <span class="save-status text-sm"></span>
-        </div>
-      `;
+        </div>`;
       return card;
     }
 
-    // ── Add a new (empty) match card ─────────────────────────────────────────
     function addMatch() {
-      const maxNum = currentMatches.reduce((m, x) => Math.max(m, x.match_number), 0);
-      const newMatch = { match_id: null, match_number: maxNum + 1, format: currentFormat, results: [] };
-      currentMatches.push(newMatch);
-      const container = document.getElementById('matches-container');
-      container.appendChild(buildCard(newMatch));
-      // Scroll to it
-      container.lastElementChild.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      const maxNum = currentMatches.reduce((m,x) => Math.max(m, x.match_number), 0);
+      const nm = { match_id: null, match_number: maxNum+1, format: currentFormat, results: [] };
+      currentMatches.push(nm);
+      const c = document.getElementById('matches-container');
+      c.appendChild(buildMatchCard(nm));
+      c.lastElementChild.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
 
-    // ── Save a single match ──────────────────────────────────────────────────
     async function saveMatch(btn) {
       const card    = btn.closest('[data-match-number]');
       const matchNo = parseInt(card.dataset.matchNumber);
       const isSingles = currentFormat === 'singles';
-
-      const b1     = card.querySelector('.blue1').value;
-      const r1     = card.querySelector('.red1').value;
-      const b2     = isSingles ? '' : card.querySelector('.blue2').value;
-      const r2     = isSingles ? '' : card.querySelector('.red2').value;
+      const b1 = card.querySelector('.blue1').value;
+      const r1 = card.querySelector('.red1').value;
+      const b2 = isSingles ? '' : card.querySelector('.blue2').value;
+      const r2 = isSingles ? '' : card.querySelector('.red2').value;
       const winner = card.querySelector('.result-select').value;
       const ups    = parseInt(card.querySelector('.ups-input').value) || 0;
       const status = card.querySelector('.save-status');
 
-      // Validate
-      if (!b1 || !r1 || !winner) {
-        status.textContent = '⚠ Please fill in all required fields';
-        status.className = 'save-status text-sm text-yellow-600';
-        return;
-      }
-      if (!isSingles && (!b2 || !r2)) {
-        status.textContent = '⚠ Please select both players per team';
-        status.className = 'save-status text-sm text-yellow-600';
-        return;
-      }
-      if (b1 === b2 || r1 === r2) {
-        status.textContent = '⚠ Same player selected twice on a team';
-        status.className = 'save-status text-sm text-yellow-600';
-        return;
-      }
+      if (!b1 || !r1 || !winner) { status.textContent='⚠ Fill in required fields'; status.className='save-status text-sm text-yellow-600'; return; }
+      if (!isSingles && (!b2||!r2)) { status.textContent='⚠ Select both players per team'; status.className='save-status text-sm text-yellow-600'; return; }
+      if (b1===b2||r1===r2) { status.textContent='⚠ Same player selected twice'; status.className='save-status text-sm text-yellow-600'; return; }
 
-      // Build players array
       let players;
       if (isSingles) {
-        players = [
-          { name: b1, team: 'blue' },
-          { name: r1, team: 'red'  },
-        ];
+        players = [{name:b1,team:'blue'},{name:r1,team:'red'}];
       } else {
         players = [
-          { name: b1, team: 'blue', partner_name: b2 },
-          { name: b2, team: 'blue', partner_name: b1 },
-          { name: r1, team: 'red',  partner_name: r2 },
-          { name: r2, team: 'red',  partner_name: r1 },
+          {name:b1,team:'blue',partner_name:b2},{name:b2,team:'blue',partner_name:b1},
+          {name:r1,team:'red', partner_name:r2},{name:r2,team:'red', partner_name:r1},
         ];
       }
 
       btn.disabled = true;
-      status.textContent = 'Saving…';
-      status.className = 'save-status text-sm text-gray-400';
-
+      status.textContent = 'Saving…'; status.className = 'save-status text-sm text-gray-400';
       try {
         const res = await fetch(`${API}/admin.php`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            year: currentYear,
-            round_number: currentRound,
-            match_number: matchNo,
-            winner,
-            ups,
-            players,
-          }),
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ year:currentYear, round_number:currentRound, match_number:matchNo, winner, ups, players }),
         });
         const data = await res.json();
-
         if (data.ok) {
-          status.textContent = '✓ Saved!';
-          status.className = 'save-status text-sm text-green-600';
-          // Update badge
+          status.textContent = '✓ Saved!'; status.className = 'save-status text-sm text-green-600';
           const badge = card.querySelector('.match-badge');
-          badge.textContent = '✓ Saved';
-          badge.className = 'match-badge text-xs px-2 py-1 rounded-full font-medium bg-green-100 text-green-700';
+          badge.textContent = '✓ Saved'; badge.className = 'match-badge text-xs px-2 py-1 rounded-full font-medium bg-green-100 text-green-700';
         } else {
-          status.textContent = '✗ ' + (data.error || 'Unknown error');
-          status.className = 'save-status text-sm text-red-600';
+          status.textContent = '✗ ' + (data.error||'Unknown error'); status.className = 'save-status text-sm text-red-600';
         }
-      } catch (e) {
-        status.textContent = '✗ Network error';
-        status.className = 'save-status text-sm text-red-600';
-      }
-
+      } catch(e) { status.textContent='✗ Network error'; status.className='save-status text-sm text-red-600'; }
       btn.disabled = false;
+    }
+
+    // ── Players tab ───────────────────────────────────────────────────────────
+    async function loadPlayers() {
+      document.getElementById('players-loading').classList.remove('hidden');
+      await refreshPlayerLists();
+      document.getElementById('players-loading').classList.add('hidden');
+      renderPlayerLists();
+    }
+
+    function renderPlayerLists() {
+      document.getElementById('blue-count').textContent = bluePlayers.length;
+      document.getElementById('red-count').textContent  = redPlayers.length;
+      document.getElementById('blue-list').innerHTML = bluePlayers.map(p => playerRow(p)).join('');
+      document.getElementById('red-list').innerHTML  = redPlayers.map(p => playerRow(p)).join('');
+    }
+
+    function playerRow(p) {
+      const otherOptions = allPlayers
+        .filter(x => x.id !== p.id)
+        .sort((a,b) => a.name.localeCompare(b.name))
+        .map(x => `<option value="${x.id}">${esc(x.name)} (${x.team})</option>`)
+        .join('');
+      return `
+        <div class="bg-white rounded-xl shadow-sm p-3 space-y-2" id="player-row-${p.id}">
+          <!-- View mode -->
+          <div class="player-view flex items-center justify-between gap-2">
+            <span class="text-sm font-medium flex-1">${esc(p.name)}</span>
+            <button onclick="startEdit(${p.id})"
+              class="text-xs text-blue-600 hover:underline px-2 py-1">Edit</button>
+            <button onclick="toggleMerge(${p.id})"
+              class="text-xs text-orange-500 hover:underline px-2 py-1">Merge</button>
+            <button onclick="deletePlayer(${p.id}, '${esc(p.name)}')"
+              class="text-xs text-red-400 hover:underline px-2 py-1">Delete</button>
+          </div>
+          <!-- Edit mode (hidden) -->
+          <div class="player-edit hidden space-y-2">
+            <input type="text" value="${esc(p.name)}"
+              class="w-full border rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 edit-name">
+            <div class="flex gap-2">
+              <select class="border rounded-lg px-2 py-1 text-sm edit-team">
+                <option value="blue"${p.team==='blue'?' selected':''}>🔵 Blue</option>
+                <option value="red"${p.team==='red'?' selected':''}>🔴 Red</option>
+              </select>
+              <button onclick="savePlayer(${p.id}, this)"
+                class="bg-blue-600 text-white rounded-lg px-3 py-1 text-xs font-semibold">Save</button>
+              <button onclick="cancelEdit(${p.id})"
+                class="text-gray-500 text-xs px-2">Cancel</button>
+              <span class="edit-status text-xs self-center"></span>
+            </div>
+          </div>
+          <!-- Merge mode (hidden) -->
+          <div class="player-merge hidden space-y-2 border-t pt-2 mt-1">
+            <p class="text-xs text-gray-500">Merge <strong>${esc(p.name)}</strong> into:</p>
+            <div class="flex gap-2">
+              <select class="flex-1 border rounded-lg px-2 py-1 text-sm merge-target">
+                <option value="">— select player to keep —</option>
+                ${otherOptions}
+              </select>
+              <button onclick="mergePlayer(${p.id}, this)"
+                class="bg-orange-500 hover:bg-orange-600 text-white rounded-lg px-3 py-1 text-xs font-semibold">Merge</button>
+              <button onclick="toggleMerge(${p.id})"
+                class="text-gray-500 text-xs px-2">Cancel</button>
+            </div>
+            <p class="text-xs text-gray-400">All match results from <strong>${esc(p.name)}</strong> will move to the selected player, then <strong>${esc(p.name)}</strong> will be deleted.</p>
+          </div>
+        </div>`;
+    }
+
+    function startEdit(id) {
+      const row = document.getElementById(`player-row-${id}`);
+      row.querySelector('.player-view').classList.add('hidden');
+      row.querySelector('.player-edit').classList.remove('hidden');
+      row.querySelector('.player-merge').classList.add('hidden');
+    }
+    function cancelEdit(id) {
+      const row = document.getElementById(`player-row-${id}`);
+      row.querySelector('.player-view').classList.remove('hidden');
+      row.querySelector('.player-edit').classList.add('hidden');
+    }
+    function toggleMerge(id) {
+      const row = document.getElementById(`player-row-${id}`);
+      const mergeDiv = row.querySelector('.player-merge');
+      const isHidden = mergeDiv.classList.contains('hidden');
+      mergeDiv.classList.toggle('hidden', !isHidden);
+      row.querySelector('.player-view').classList.toggle('hidden', isHidden);
+      row.querySelector('.player-edit').classList.add('hidden');
+    }
+
+    async function savePlayer(id, btn) {
+      const row    = document.getElementById(`player-row-${id}`);
+      const name   = row.querySelector('.edit-name').value.trim();
+      const team   = row.querySelector('.edit-team').value;
+      const status = row.querySelector('.edit-status');
+      if (!name) { status.textContent = '⚠ Name required'; return; }
+      btn.disabled = true;
+      status.textContent = 'Saving…';
+      try {
+        const res = await fetch(`${API}/admin.php`, {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ action:'update_player', id, name, team }),
+        });
+        const data = await res.json();
+        if (data.ok) {
+          await refreshPlayerLists();
+          renderPlayerLists();
+        } else {
+          status.textContent = '✗ ' + (data.error||'Error'); btn.disabled = false;
+        }
+      } catch(e) { status.textContent = '✗ Network error'; btn.disabled = false; }
+    }
+
+    async function mergePlayer(mergeId, btn) {
+      const row    = document.getElementById(`player-row-${mergeId}`);
+      const keepId = parseInt(row.querySelector('.merge-target').value);
+      if (!keepId) { alert('Please select the player to keep.'); return; }
+      const keepName = allPlayers.find(p => p.id === keepId)?.name || '';
+      const mergeName = allPlayers.find(p => p.id === mergeId)?.name || '';
+      if (!confirm(`Merge "${mergeName}" into "${keepName}"?\n\nAll match results from "${mergeName}" will move to "${keepName}", and "${mergeName}" will be permanently deleted.`)) return;
+      btn.disabled = true;
+      try {
+        const res = await fetch(`${API}/admin.php`, {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ action:'merge_players', keep_id:keepId, merge_id:mergeId }),
+        });
+        const data = await res.json();
+        if (data.ok) {
+          await refreshPlayerLists();
+          renderPlayerLists();
+        } else {
+          alert('Error: ' + (data.error||'Unknown')); btn.disabled = false;
+        }
+      } catch(e) { alert('Network error'); btn.disabled = false; }
+    }
+
+    async function deletePlayer(id, name) {
+      if (!confirm(`Delete "${name}"?\n\nThis only works if they have no match results.`)) return;
+      const res = await fetch(`${API}/admin.php`, {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ action:'delete_player', id }),
+      });
+      const data = await res.json();
+      if (data.ok) { await refreshPlayerLists(); renderPlayerLists(); }
+      else alert('Cannot delete: ' + (data.error||'Unknown error'));
+    }
+
+    async function addPlayer() {
+      const name   = document.getElementById('new-player-name').value.trim();
+      const team   = document.getElementById('new-player-team').value;
+      const status = document.getElementById('add-player-status');
+      if (!name) { status.textContent = '⚠ Name required'; status.className = 'text-sm text-yellow-600'; return; }
+      status.textContent = 'Adding…'; status.className = 'text-sm text-gray-400';
+      try {
+        const res = await fetch(`${API}/admin.php`, {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ action:'add_player', name, team }),
+        });
+        const data = await res.json();
+        if (data.ok) {
+          document.getElementById('new-player-name').value = '';
+          status.textContent = '✓ Added!'; status.className = 'text-sm text-green-600';
+          await refreshPlayerLists();
+          renderPlayerLists();
+        } else {
+          status.textContent = '✗ ' + (data.error||'Error'); status.className = 'text-sm text-red-600';
+        }
+      } catch(e) { status.textContent = '✗ Network error'; status.className = 'text-sm text-red-600'; }
     }
   </script>
 </body>
