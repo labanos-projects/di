@@ -32,7 +32,7 @@ $stmt->execute([$id]);
 $player = $stmt->fetch();
 if (!$player) { http_response_code(404); echo json_encode(['error' => 'Player not found']); exit; }
 
-// ── Year-by-year summary ───────────────────────────────────────────────────────
+// ── Year-by-year summary (most recent first) ───────────────────────────────────
 $stmt2 = $pdo->prepare("
     SELECT
         t.year,
@@ -48,7 +48,7 @@ $stmt2 = $pdo->prepare("
     JOIN tournaments t ON t.id = r.tournament_id
     WHERE mr.player_id = ?
     GROUP BY t.year
-    ORDER BY t.year ASC
+    ORDER BY t.year DESC
 ");
 $stmt2->execute([$id]);
 $player['years'] = $stmt2->fetchAll();
