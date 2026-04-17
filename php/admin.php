@@ -1,8 +1,13 @@
 <?php
-// Admin endpoint: read/write match results by human-readable names
-// GET  ?year=X&round=Y  -> all match slots for that round (with results if they exist)
-// POST                  -> replace a match result from player names + winner/ups
-// v1.2
+// Admin endpoint — match results + player management
+// GET  ?year=X&round=Y          -> match slots for that round
+// GET  ?action=players          -> all players
+// POST {action:'add_player'}    -> create player
+// POST {action:'update_player'} -> rename / change team
+// POST {action:'merge_players'} -> reassign results from merge_id -> keep_id, delete merge_id
+// POST {action:'delete_player'} -> delete player (only if no results)
+// POST (no action)              -> replace match results
+// v1.3
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
@@ -13,8 +18,17 @@ require_once __DIR__ . '/db_connect.php';
 
 $method = $_SERVER['REQUEST_METHOD'];
 
-// ── GET: all match slots for a year+round, with results if they exist ──────
+// ── GET ──────────────────────────────────────────────────────────────────────
 if ($method === 'GET') {
+
+    // Player list
+    if (($_GET['action'] ?? '') === 'players') {
+        $stmt = $pdo->query("SELECT id, name, team, active FROM players ORDER BY team, name");
+        echo json_encode($stmt->fetchAll());
+        exit;
+    }
+
+    // Match slots for a year + round
     $year  = (int)($_GET['year']  ?? 0);
     $round = (int)($_GET['round'] ?? 0);
     if (!$year || !$round) {
@@ -68,16 +82,111 @@ if ($method === 'GET') {
     exit;
 }
 
-// ── POST: replace match results (delete old rows, insert fresh) ──────────────
+// ── POST ─────────────────────────────────────────────────────────────────────
 if ($method === 'POST') {
-    $data = json_decode(file_get_contents('php://input'), true);
+    $data   = json_decode(file_get_contents('php://input'), true);
+    $action = $data['action'] ?? '';
 
+    // ── Add player ────────────────────────────────────────────────────────────
+    if ($action === 'add_player') {
+        $name = trim($data['name'] ?? '');
+        $team = $data['team'] ?? '';
+        if (!$name || !in_array($team, ['blue','red'])) {
+            http_response_code(400);
+            echo json_encode(['error' => 'name and team (blue|red) required']);
+            exit;
+        }
+        try {
+            $pdo->prepare("INSERT INTO players (name, team, active) VALUES (?, ?, 1)")
+                ->execute([$name, $team]);
+            echo json_encode(['ok' => true, 'id' => (int)$pdo->lastInsertId()]);
+        } catch (PDOException $e) {
+            http_response_code(409);
+            echo json_encode(['error' => 'Player already exists']);
+        }
+        exit;
+    }
+
+    // ── Update player (rename / change team) ─────────────────────────────────
+    if ($action === 'update_player') {
+        $id   = (int)($data['id']   ?? 0);
+        $name = trim($data['name']  ?? '');
+        $team = $data['team'] ?? '';
+        if (!$id || !$name || !in_array($team, ['blue','red'])) {
+            http_response_code(400);
+            echo json_encode(['error' => 'id, name and team required']);
+            exit;
+        }
+        $pdo->prepare("UPDATE players SET name = ?, team = ? WHERE id = ?")
+            ->execute([$name, $team, $id]);
+        echo json_encode(['ok' => true]);
+        exit;
+    }
+
+    // ── Merge players ─────────────────────────────────────────────────────────
+    // Reassigns all match_results from merge_id to keep_id, then deletes merge_id.
+    // If both have a result in the same match, the merge_id row is discarded.
+    if ($action === 'merge_players') {
+        $keep_id  = (int)($data['keep_id']  ?? 0);
+        $merge_id = (int)($data['merge_id'] ?? 0);
+        if (!$keep_id || !$merge_id || $keep_id === $merge_id) {
+            http_response_code(400);
+            echo json_encode(['error' => 'keep_id and merge_id required and must differ']);
+            exit;
+        }
+
+        // Fix partner references (other players who listed merge_id as partner)
+        $pdo->prepare("UPDATE match_results SET partner_id = ? WHERE partner_id = ?")
+            ->execute([$keep_id, $merge_id]);
+
+        // Move results that don't conflict (keep_id has no result for the same match)
+        $pdo->prepare("
+            UPDATE match_results
+            SET player_id = ?
+            WHERE player_id = ?
+              AND match_id NOT IN (
+                  SELECT match_id FROM (
+                      SELECT match_id FROM match_results WHERE player_id = ?
+                  ) AS tmp
+              )
+        ")->execute([$keep_id, $merge_id, $keep_id]);
+
+        // Drop any remaining rows for merge_id (conflict matches — keep_id already has one)
+        $pdo->prepare("DELETE FROM match_results WHERE player_id = ?")
+            ->execute([$merge_id]);
+
+        // Delete the merged player
+        $pdo->prepare("DELETE FROM players WHERE id = ?")
+            ->execute([$merge_id]);
+
+        echo json_encode(['ok' => true]);
+        exit;
+    }
+
+    // ── Delete player ─────────────────────────────────────────────────────────
+    if ($action === 'delete_player') {
+        $id = (int)($data['id'] ?? 0);
+        if (!$id) { http_response_code(400); echo json_encode(['error' => 'id required']); exit; }
+
+        $stmt = $pdo->prepare("SELECT COUNT(*) FROM match_results WHERE player_id = ?");
+        $stmt->execute([$id]);
+        if ($stmt->fetchColumn() > 0) {
+            http_response_code(409);
+            echo json_encode(['error' => 'Player has match results — merge instead of deleting']);
+            exit;
+        }
+        $pdo->prepare("DELETE FROM players WHERE id = ?")->execute([$id]);
+        echo json_encode(['ok' => true]);
+        exit;
+    }
+
+    // ── Replace match results (no action = match save) ────────────────────────
     $year         = (int)($data['year']         ?? 0);
     $round_number = (int)($data['round_number'] ?? 0);
     $match_number = (int)($data['match_number'] ?? 0);
-    $winner       = $data['winner']  ?? '';   // 'blue' | 'red' | 'halved'
+    $winner       = $data['winner']  ?? '';
     $ups_value    = (int)($data['ups'] ?? 0);
-    $players      = $data['players'] ?? [];   // [{name, team, partner_name?}]
+    $players      = $data['players'] ?? [];
 
     if (!$year || !$round_number || !$match_number || !$players || !$winner) {
         http_response_code(400);
@@ -85,7 +194,6 @@ if ($method === 'POST') {
         exit;
     }
 
-    // Find match_id
     $stmt = $pdo->prepare("
         SELECT m.id FROM matches m
         JOIN rounds r ON r.id = m.round_id
@@ -101,7 +209,6 @@ if ($method === 'POST') {
     }
     $match_id = $match['id'];
 
-    // Resolve player IDs and partner IDs, compute points/ups
     $resolved = [];
     foreach ($players as $p) {
         $stmt = $pdo->prepare("SELECT id FROM players WHERE name = ?");
@@ -133,8 +240,6 @@ if ($method === 'POST') {
         $resolved[] = [$match_id, $player_id, $points, $ups, $partner_id];
     }
 
-    // Delete all existing results for this match, then insert fresh.
-    // This prevents stale rows accumulating when players change.
     $pdo->prepare("DELETE FROM match_results WHERE match_id = ?")->execute([$match_id]);
 
     $stmt = $pdo->prepare("
