@@ -9,8 +9,8 @@
 // POST {action:'merge_players'} -> reassign results from merge_id -> keep_id, delete merge_id
 // POST {action:'delete_player'} -> delete player (only if no results)
 // POST {action:'delete_match'}  -> delete match and all its results
-// POST (no action)              -> replace match results (creates match row if needed)
-// v1.6
+// POST (no action)              -> replace match results (winner may be omitted for upcoming matches)
+// v1.7
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
@@ -82,8 +82,9 @@ if ($method === 'GET') {
                 'player_id'    => (int)$row['player_id'],
                 'player_name'  => $row['player_name'],
                 'team'         => $row['team'],
-                'points'       => (int)$row['points'],
-                'ups'          => (int)$row['ups'],
+                // Preserve NULL so the admin can distinguish upcoming vs played
+                'points'       => $row['points'] !== null ? (int)$row['points'] : null,
+                'ups'          => $row['ups']    !== null ? (int)$row['ups']    : null,
                 'partner_id'   => $row['partner_id'] ? (int)$row['partner_id'] : null,
                 'partner_name' => $row['partner_name'],
             ];
@@ -111,7 +112,6 @@ if ($method === 'POST') {
             exit;
         }
 
-        // Check year doesn't already exist
         $stmt = $pdo->prepare("SELECT id FROM tournaments WHERE year = ?");
         $stmt->execute([$year]);
         if ($stmt->fetch()) {
@@ -120,11 +120,9 @@ if ($method === 'POST') {
             exit;
         }
 
-        // Create tournament
         $pdo->prepare("INSERT INTO tournaments (year) VALUES (?)")->execute([$year]);
         $tournament_id = (int)$pdo->lastInsertId();
 
-        // Create rounds
         $stmt = $pdo->prepare("INSERT INTO rounds (tournament_id, round_number, format) VALUES (?, ?, ?)");
         foreach ($rounds as $r) {
             $rn  = (int)($r['round_number'] ?? 0);
@@ -237,21 +235,21 @@ if ($method === 'POST') {
         exit;
     }
 
-    // ── Save match results (creates the match row if it doesn't exist yet) ────
+    // ── Save match (creates match row if needed; winner is optional for upcoming) ──
     $year         = (int)($data['year']         ?? 0);
     $round_number = (int)($data['round_number'] ?? 0);
     $match_number = (int)($data['match_number'] ?? 0);
-    $winner       = $data['winner']  ?? '';
+    $winner       = $data['winner']  ?? '';   // '' = upcoming (no result yet)
     $ups_value    = (int)($data['ups'] ?? 0);
     $players      = $data['players'] ?? [];
 
-    if (!$year || !$round_number || !$match_number || !$players || !$winner) {
+    if (!$year || !$round_number || !$match_number || !$players) {
         http_response_code(400);
-        echo json_encode(['error' => 'year, round_number, match_number, winner, players required']);
+        echo json_encode(['error' => 'year, round_number, match_number, players required']);
         exit;
     }
 
-    // Look up existing match row
+    // Look up or create the match row
     $stmt = $pdo->prepare("
         SELECT m.id FROM matches m
         JOIN rounds r ON r.id = m.round_id
@@ -262,7 +260,6 @@ if ($method === 'POST') {
     $match = $stmt->fetch();
 
     if (!$match) {
-        // Match row missing — find the round and create it
         $stmt2 = $pdo->prepare("
             SELECT r.id FROM rounds r
             JOIN tournaments t ON t.id = r.tournament_id
@@ -302,7 +299,11 @@ if ($method === 'POST') {
             if ($r2) $partner_id = $r2['id'];
         }
 
-        if ($winner === 'halved') {
+        // winner = '' means upcoming — store NULL for points and ups
+        if ($winner === '') {
+            $points = null;
+            $ups    = null;
+        } elseif ($winner === 'halved') {
             $points = 1; $ups = 0;
         } elseif ($winner === $p['team']) {
             $points = 2; $ups = $ups_value;
