@@ -1,5 +1,5 @@
 <?php
-// GET /php/player_stats.php?id=1 -> career totals + year-by-year + match details for one player
+// GET /php/player_stats.php?id=1 -> career totals + year-by-year + match details + format record + head-to-head
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 
@@ -12,7 +12,7 @@ if (!$id) { http_response_code(400); echo json_encode(['error' => 'id required']
 
 // DB stores points doubled (2=win, 1=halved, 0=loss); divide by 2 for display
 
-// ── Career totals ──────────────────────────────────────────────────────────────
+// ── Career totals ────────────────────────────────────────────────────
 $stmt = $pdo->prepare("
     SELECT
         p.id, p.name, p.team, p.active,
@@ -96,5 +96,71 @@ foreach ($player['years'] as &$yr) {
     $yr['match_details'] = $byYear[$yr['year']] ?? [];
 }
 unset($yr);
+
+// ── Record by match format ────────────────────────────────────────────────────
+$stmt4 = $pdo->prepare("
+    SELECT
+        r.format,
+        COUNT(mr.id)                                             AS matches,
+        COALESCE(SUM(CASE WHEN mr.points=2 THEN 1 END), 0)      AS wins,
+        COALESCE(SUM(CASE WHEN mr.points=1 THEN 1 END), 0)      AS halves,
+        COALESCE(SUM(CASE WHEN mr.points=0 THEN 1 END), 0)      AS losses
+    FROM match_results mr
+    JOIN matches m ON m.id = mr.match_id
+    JOIN rounds r  ON r.id = m.round_id
+    WHERE mr.player_id = ? AND mr.points IS NOT NULL
+    GROUP BY r.format
+    ORDER BY
+        CASE r.format
+            WHEN 'fourball'  THEN 1
+            WHEN 'greensome' THEN 2
+            WHEN 'foursome'  THEN 3
+            WHEN 'singles'   THEN 4
+            ELSE 5
+        END
+");
+$stmt4->execute([$id]);
+$player['format_record'] = array_map(function($r) {
+    return [
+        'format'  => $r['format'],
+        'matches' => (int)$r['matches'],
+        'wins'    => (int)$r['wins'],
+        'halves'  => (int)$r['halves'],
+        'losses'  => (int)$r['losses'],
+    ];
+}, $stmt4->fetchAll(PDO::FETCH_ASSOC));
+
+// ── Head-to-head record vs each opponent ─────────────────────────────────
+// Each opponent appearance in a match is counted separately (so a fourball
+// opponent pair each get credited with 1 head-to-head record per match).
+$stmt5 = $pdo->prepare("
+    SELECT
+        opp.id   AS opponent_id,
+        opp.name AS opponent_name,
+        COUNT(*)                                                 AS played,
+        COALESCE(SUM(CASE WHEN mr.points=2 THEN 1 END), 0)      AS wins,
+        COALESCE(SUM(CASE WHEN mr.points=1 THEN 1 END), 0)      AS halves,
+        COALESCE(SUM(CASE WHEN mr.points=0 THEN 1 END), 0)      AS losses
+    FROM match_results mr
+    JOIN players me           ON me.id  = mr.player_id
+    JOIN match_results mr_opp ON mr_opp.match_id  = mr.match_id
+                              AND mr_opp.player_id != mr.player_id
+    JOIN players opp          ON opp.id = mr_opp.player_id
+                              AND opp.team != me.team
+    WHERE mr.player_id = ? AND mr.points IS NOT NULL
+    GROUP BY opp.id, opp.name
+    ORDER BY played DESC, wins DESC
+");
+$stmt5->execute([$id]);
+$player['head_to_head'] = array_map(function($r) {
+    return [
+        'opponent_id'   => (int)$r['opponent_id'],
+        'opponent_name' => $r['opponent_name'],
+        'played'        => (int)$r['played'],
+        'wins'          => (int)$r['wins'],
+        'halves'        => (int)$r['halves'],
+        'losses'        => (int)$r['losses'],
+    ];
+}, $stmt5->fetchAll(PDO::FETCH_ASSOC));
 
 echo json_encode($player);

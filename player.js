@@ -1,6 +1,6 @@
-// ─── Player Profile View ──────────────────────────────────────────────────────
+// ─── Player Profile View ──────────────────────────────────────────────
 
-const FORMAT_ABBR = { Fourball: '4B', Greensome: 'GS', Foursome: 'FS', Singles: 'S' };
+const FORMAT_ABBR = { fourball: '4B', greensome: 'GS', foursome: 'FS', singles: 'S' };
 
 function ResultBadge({ points }) {
   if (points === 2) return <span className="inline-block px-1.5 py-0.5 rounded text-xs font-bold bg-green-100 text-green-700">W</span>;
@@ -22,7 +22,7 @@ function MatchDetailsTable({ details }) {
       <thead>
         <tr className="text-slate-400 border-b border-slate-200">
           <th className="py-1.5 text-left pr-3 font-medium">Rnd</th>
-          <th className="py-1.5 text-left pr-3 font-medium">Format</th>
+          <th className="py-1.5 text-left pr-3 font-medium">Fmt</th>
           <th className="py-1.5 text-left pr-3 font-medium">Partner</th>
           <th className="py-1.5 text-left font-medium">Opponents</th>
           <th className="py-1.5 text-right font-medium">Result</th>
@@ -53,6 +53,100 @@ function MatchDetailsTable({ details }) {
     </table>
   );
 }
+
+// ─── Opponent spotlight row ─────────────────────────────────────────────
+
+function OpponentStat({ label, opp, highlight }) {
+  const color = highlight === 'wins' ? 'text-green-600' : highlight === 'losses' ? 'text-red-500' : 'text-slate-700';
+  return (
+    <div className="flex items-center justify-between py-2">
+      <div className="flex items-center gap-2 min-w-0">
+        <span className="text-xs text-slate-400 w-24 shrink-0">{label}</span>
+        <span className="font-medium text-slate-700 text-sm truncate">{opp.opponent_name}</span>
+      </div>
+      <div className="text-xs mono ml-2 whitespace-nowrap flex items-center gap-1">
+        <span className={`font-bold text-sm ${color}`}>{opp[highlight]}</span>
+        <span className="text-slate-300">|</span>
+        <span className="text-green-600">{opp.wins}W</span>
+        <span className="text-amber-500">{opp.halves}H</span>
+        <span className="text-slate-400">{opp.losses}L</span>
+        <span className="text-slate-300">of</span>
+        <span className="text-slate-500">{opp.played}</span>
+      </div>
+    </div>
+  );
+}
+
+// ─── Stats card (format record + opponent spotlights) ──────────────────────
+
+function StatsCard({ data }) {
+  const fmt = data.format_record || [];
+  const h2h = data.head_to_head  || [];
+
+  const mostPlayed = h2h.length > 0
+    ? [...h2h].sort((a, b) => b.played - a.played)[0]
+    : null;
+  const mostBeaten = h2h.filter(o => o.wins > 0).sort((a, b) => b.wins - a.wins)[0]   || null;
+  const mostLostTo = h2h.filter(o => o.losses > 0).sort((a, b) => b.losses - a.losses)[0] || null;
+
+  if (fmt.length === 0 && h2h.length === 0) return null;
+
+  return (
+    <div className="bg-white rounded-2xl shadow-sm overflow-hidden mt-4">
+      <div className="px-4 py-3 border-b border-slate-100 text-xs font-bold uppercase tracking-wide text-slate-400">
+        More Stats
+      </div>
+
+      {/* Record by format */}
+      {fmt.length > 0 && (
+        <div className="px-4 py-3 border-b border-slate-100">
+          <div className="text-xs font-bold uppercase tracking-wide text-slate-400 mb-2">Record by Format</div>
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-slate-400 border-b border-slate-100">
+                <th className="py-1 text-left font-medium">Format</th>
+                <th className="py-1 text-right font-medium">M</th>
+                <th className="py-1 text-right font-medium text-green-600">W</th>
+                <th className="py-1 text-right font-medium text-amber-500">H</th>
+                <th className="py-1 text-right font-medium text-slate-400">L</th>
+                <th className="py-1 text-right font-medium">Pts</th>
+              </tr>
+            </thead>
+            <tbody>
+              {fmt.map(f => {
+                const pts = (f.wins * 2 + f.halves) / 2;
+                return (
+                  <tr key={f.format} className="border-t border-slate-50">
+                    <td className="py-1.5 text-slate-600 capitalize">{f.format}</td>
+                    <td className="py-1.5 text-right mono text-slate-500">{f.matches}</td>
+                    <td className="py-1.5 text-right mono text-green-600">{f.wins}</td>
+                    <td className="py-1.5 text-right mono text-amber-500">{f.halves}</td>
+                    <td className="py-1.5 text-right mono text-slate-400">{f.losses}</td>
+                    <td className="py-1.5 text-right mono text-slate-500">{fmtPts(pts)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Opponent spotlights */}
+      {(mostPlayed || mostBeaten || mostLostTo) && (
+        <div className="px-4 py-3">
+          <div className="text-xs font-bold uppercase tracking-wide text-slate-400 mb-1">Opponents</div>
+          <div className="divide-y divide-slate-50">
+            {mostPlayed && <OpponentStat label="Most played" opp={mostPlayed} highlight="played" />}
+            {mostBeaten && <OpponentStat label="Most beaten" opp={mostBeaten} highlight="wins" />}
+            {mostLostTo && <OpponentStat label="Most losses to" opp={mostLostTo} highlight="losses" />}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Main player view ───────────────────────────────────────────────────────
 
 function PlayerView({ playerId, onBack }) {
   const [data, setData]         = React.useState(null);
@@ -151,6 +245,9 @@ function PlayerView({ playerId, onBack }) {
           </tbody>
         </table>
       </div>
+
+      {/* Additional stats card */}
+      <StatsCard data={data} />
     </div>
   );
 }
