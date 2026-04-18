@@ -250,7 +250,6 @@
       sel.innerHTML = years.length
         ? years.map(y => `<option value="${y}">${y}</option>`).join('')
         : '<option value="">— no years —</option>';
-      // Default to most recent (first, since sorted DESC)
       if (years.length) currentYear = years[0];
     }
 
@@ -289,10 +288,8 @@
           status.textContent = `✓ Year ${yearVal} created!`; status.className = 'text-sm text-green-600';
           document.getElementById('new-year-input').value = '';
           await refreshYears();
-          // Switch year selector to the new year
           document.getElementById('year-select').value = yearVal;
           currentYear = yearVal;
-          // Collapse the panel
           document.getElementById('new-year-panel').classList.add('hidden');
           document.getElementById('new-year-arrow').textContent = '▼';
         } else {
@@ -347,11 +344,19 @@
       return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
 
+    // Returns winner string and ups for a saved result; null points = upcoming
     function matchResult(results) {
-      if (!results || !results.length) return { winner: '', ups: '' };
+      if (!results || !results.length) return { winner: '', ups: '', upcoming: false };
       const b = results.find(r => r.team === 'blue');
-      if (!b) return { winner: '', ups: '' };
-      return { winner: b.points==2?'blue':b.points==0?'red':'halved', ups: Math.abs(b.ups) };
+      if (!b) return { winner: '', ups: '', upcoming: false };
+      if (b.points === null || b.points === undefined) return { winner: '', ups: '', upcoming: true };
+      return { winner: b.points==2?'blue':b.points==0?'red':'halved', ups: Math.abs(b.ups || 0), upcoming: false };
+    }
+
+    function badgeHtml(hasPlayers, upcoming, hasFinalResult) {
+      if (hasFinalResult) return '<span class="match-badge text-xs px-2 py-1 rounded-full font-medium bg-green-100 text-green-700">✓ Saved</span>';
+      if (upcoming)       return '<span class="match-badge text-xs px-2 py-1 rounded-full font-medium bg-amber-100 text-amber-700">⏳ Upcoming</span>';
+      return '<span class="match-badge text-xs px-2 py-1 rounded-full font-medium bg-gray-100 text-gray-500">Empty</span>';
     }
 
     function renderMatches() {
@@ -362,12 +367,13 @@
 
     function buildMatchCard(match) {
       const isSingles = match.format === 'singles';
-      const { winner, ups } = matchResult(match.results);
+      const { winner, ups, upcoming } = matchResult(match.results);
       const blues = (match.results||[]).filter(r => r.team==='blue');
       const reds  = (match.results||[]).filter(r => r.team==='red');
       const b1 = blues[0]?.player_name||'', b2 = blues[1]?.player_name||'';
       const r1 = reds[0]?.player_name||'',  r2 = reds[1]?.player_name||'';
-      const hasData = !!(match.results && match.results.length);
+      const hasPlayers     = blues.length > 0 || reds.length > 0;
+      const hasFinalResult = hasPlayers && !upcoming;
 
       const card = document.createElement('div');
       card.className = 'bg-white rounded-2xl shadow p-5';
@@ -375,7 +381,7 @@
       card.dataset.matchId     = match.match_id || '';
 
       const resultOpts = `
-        <option value="">— result —</option>
+        <option value="">— no result yet —</option>
         <option value="blue"${winner==='blue'?' selected':''}>🔵 Blue wins</option>
         <option value="red"${winner==='red'?' selected':''}>🔴 Red wins</option>
         <option value="halved"${winner==='halved'?' selected':''}>🤝 Halved</option>`;
@@ -384,9 +390,7 @@
         <div class="flex items-center justify-between mb-4">
           <h3 class="font-bold text-lg">Match ${match.match_number}</h3>
           <div class="flex items-center gap-2">
-            <span class="match-badge text-xs px-2 py-1 rounded-full font-medium ${hasData?'bg-green-100 text-green-700':'bg-gray-100 text-gray-500'}">
-              ${hasData?'✓ Saved':'Empty'}
-            </span>
+            ${badgeHtml(hasPlayers, upcoming, hasFinalResult)}
             <button onclick="deleteMatch(this)"
               class="text-xs text-red-400 hover:text-red-600 hover:bg-red-50 px-2 py-1 rounded-lg transition"
               title="Delete this match">
@@ -398,8 +402,7 @@
           <div class="space-y-2">
             <p class="text-xs font-bold text-blue-600 uppercase tracking-wide">🔵 Blue</p>
             <select class="w-full border rounded-lg px-2 py-1.5 text-sm blue1">${playerOptions(bluePlayers, b1)}</select>
-            ${!isSingles?`<select class="w-full border rounded-lg px-2 py-1.5 text-sm blue2">${playerOptions(bluePlayers, b2)}</select>`:''}
-          </div>
+            ${!isSingles?`<select class="w-full border rounded-lg px-2 py-1.5 text-sm blue2">${playerOptions(bluePlayers, b2)}</select>`:''}</div>
           <div class="space-y-2">
             <p class="text-xs font-bold text-red-600 uppercase tracking-wide">🔴 Red</p>
             <select class="w-full border rounded-lg px-2 py-1.5 text-sm red1">${playerOptions(redPlayers, r1)}</select>
@@ -408,7 +411,7 @@
         </div>
         <div class="flex items-end gap-4 mb-4">
           <div class="flex-1">
-            <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Result</label>
+            <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Result <span class="text-gray-300 font-normal normal-case">(optional — leave blank for upcoming)</span></label>
             <select class="w-full border rounded-lg px-2 py-1.5 text-sm result-select">${resultOpts}</select>
           </div>
           <div class="w-28">
@@ -470,18 +473,19 @@
     }
 
     async function saveMatch(btn) {
-      const card    = btn.closest('[data-match-number]');
-      const matchNo = parseInt(card.dataset.matchNumber);
+      const card      = btn.closest('[data-match-number]');
+      const matchNo   = parseInt(card.dataset.matchNumber);
       const isSingles = currentFormat === 'singles';
-      const b1 = card.querySelector('.blue1').value;
-      const r1 = card.querySelector('.red1').value;
-      const b2 = isSingles ? '' : card.querySelector('.blue2').value;
-      const r2 = isSingles ? '' : card.querySelector('.red2').value;
-      const winner = card.querySelector('.result-select').value;
-      const ups    = parseInt(card.querySelector('.ups-input').value) || 0;
-      const status = card.querySelector('.save-status');
+      const b1        = card.querySelector('.blue1').value;
+      const r1        = card.querySelector('.red1').value;
+      const b2        = isSingles ? '' : card.querySelector('.blue2').value;
+      const r2        = isSingles ? '' : card.querySelector('.red2').value;
+      const winner    = card.querySelector('.result-select').value; // '' = upcoming
+      const ups       = parseInt(card.querySelector('.ups-input').value) || 0;
+      const status    = card.querySelector('.save-status');
 
-      if (!b1 || !r1 || !winner) { status.textContent='⚠ Fill in required fields'; status.className='save-status text-sm text-yellow-600'; return; }
+      // Players are always required; result is optional
+      if (!b1 || !r1) { status.textContent='⚠ Select players for both teams'; status.className='save-status text-sm text-yellow-600'; return; }
       if (!isSingles && (!b2||!r2)) { status.textContent='⚠ Select both players per team'; status.className='save-status text-sm text-yellow-600'; return; }
       if (b1===b2||r1===r2) { status.textContent='⚠ Same player selected twice'; status.className='save-status text-sm text-yellow-600'; return; }
 
@@ -505,9 +509,18 @@
         const data = await res.json();
         if (data.ok) {
           if (data.match_id) card.dataset.matchId = String(data.match_id);
-          status.textContent = '✓ Saved!'; status.className = 'save-status text-sm text-green-600';
+          const isUpcoming = !winner;
+          status.textContent = isUpcoming ? '✓ Saved as upcoming!' : '✓ Saved!';
+          status.className = 'save-status text-sm text-green-600';
+          // Update badge
           const badge = card.querySelector('.match-badge');
-          badge.textContent = '✓ Saved'; badge.className = 'match-badge text-xs px-2 py-1 rounded-full font-medium bg-green-100 text-green-700';
+          if (isUpcoming) {
+            badge.textContent = '⏳ Upcoming';
+            badge.className = 'match-badge text-xs px-2 py-1 rounded-full font-medium bg-amber-100 text-amber-700';
+          } else {
+            badge.textContent = '✓ Saved';
+            badge.className = 'match-badge text-xs px-2 py-1 rounded-full font-medium bg-green-100 text-green-700';
+          }
         } else {
           status.textContent = '✗ ' + (data.error||'Unknown error'); status.className = 'save-status text-sm text-red-600';
         }
