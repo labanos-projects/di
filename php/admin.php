@@ -1,7 +1,7 @@
 <?php
 // Admin endpoint — match results + player management
 // GET  ?action=players          -> all players
-// GET  ?action=years            -> all tournament years
+// GET  ?action=years            -> all tournament years (excluding legacy)
 // GET  ?year=X&round=Y          -> match slots for that round
 // POST {action:'add_year'}      -> create tournament + rounds for a new year
 // POST {action:'add_player'}    -> create player
@@ -10,7 +10,7 @@
 // POST {action:'delete_player'} -> delete player (only if no results)
 // POST {action:'delete_match'}  -> delete match and all its results
 // POST (no action)              -> replace match results (winner may be omitted for upcoming matches)
-// v1.7
+// v1.8
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
@@ -18,6 +18,8 @@ header('Access-Control-Allow-Headers: Content-Type');
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(204); exit; }
 
 require_once __DIR__ . '/db_connect.php';
+require_once __DIR__ . '/db_migrate.php';
+run_migrations($pdo);
 
 $method = $_SERVER['REQUEST_METHOD'];
 
@@ -33,9 +35,9 @@ if ($method === 'GET') {
         exit;
     }
 
-    // All tournament years (for populating the year dropdown)
+    // All tournament years — exclude legacy years (history-only, no match data)
     if ($action === 'years') {
-        $stmt = $pdo->query("SELECT year FROM tournaments ORDER BY year DESC");
+        $stmt = $pdo->query("SELECT year FROM tournaments WHERE COALESCE(legacy, 0) = 0 ORDER BY year DESC");
         echo json_encode($stmt->fetchAll(PDO::FETCH_COLUMN));
         exit;
     }

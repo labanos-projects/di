@@ -51,4 +51,16 @@ function run_migrations($pdo) {
     // Safe to re-run — MySQL silently succeeds if column is already nullable
     try { $pdo->exec("ALTER TABLE match_results MODIFY COLUMN points TINYINT NULL COMMENT '0=loss 1=halved 2=win NULL=not played yet'"); } catch (Exception $e) {}
     try { $pdo->exec("ALTER TABLE match_results MODIFY COLUMN ups INT NULL DEFAULT NULL COMMENT 'hole margin NULL=not played'"); } catch (Exception $e) {}
+
+    // Legacy years: historical results with no individual match data
+    try { $pdo->exec("ALTER TABLE tournaments ADD COLUMN legacy TINYINT(1) NOT NULL DEFAULT 0"); } catch (Exception $e) {}
+    try { $pdo->exec("ALTER TABLE tournaments ADD COLUMN blue_score_override INT NULL DEFAULT NULL"); } catch (Exception $e) {}
+    try { $pdo->exec("ALTER TABLE tournaments ADD COLUMN red_score_override  INT NULL DEFAULT NULL"); } catch (Exception $e) {}
+
+    // 2018: Blue 18 – Red 12 (match data not available)
+    try {
+        $pdo->exec("INSERT INTO tournaments (year, legacy, blue_score_override, red_score_override)
+                    VALUES (2018, 1, 18, 12)
+                    ON DUPLICATE KEY UPDATE legacy = 1, blue_score_override = 18, red_score_override = 12");
+    } catch (Exception $e) {}
 }

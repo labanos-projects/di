@@ -38,6 +38,7 @@ if ($year) {
     // Use a subquery to get one result row per match per team (MAX deduplicates
     // fourball/greensome/foursome where 2 players each have the same points).
     // DB stores points doubled (2=win, 1=halved, 0=loss); history.js divides by 2.
+    // Exclude upcoming matches (points IS NULL) from score totals.
     $stmt = $pdo->query("
         SELECT year, team, SUM(match_pts) AS team_points, SUM(match_ups) AS team_ups
         FROM (
@@ -52,6 +53,7 @@ if ($year) {
             JOIN matches m        ON m.round_id = r.id
             JOIN match_results mr ON mr.match_id = m.id
             JOIN players p        ON p.id = mr.player_id
+            WHERE mr.points IS NOT NULL
             GROUP BY t.year, p.team, m.id
         ) per_match
         GROUP BY year, team
@@ -67,5 +69,26 @@ if ($year) {
             'ups'    => (int)$row['team_ups'],
         ];
     }
+
+    // Include legacy years (override scores, no match data)
+    $stmt2 = $pdo->query("
+        SELECT year, blue_score_override, red_score_override
+        FROM tournaments
+        WHERE legacy = 1 AND (blue_score_override IS NOT NULL OR red_score_override IS NOT NULL)
+        ORDER BY year ASC
+    ");
+    foreach ($stmt2->fetchAll() as $ov) {
+        $y = (string)$ov['year'];
+        if (!isset($out[$y])) {
+            // Only use override if no computed match data exists for this year
+            $out[$y] = [
+                'blue'   => ['points' => (int)$ov['blue_score_override'] * 2, 'ups' => 0],
+                'red'    => ['points' => (int)$ov['red_score_override']  * 2, 'ups' => 0],
+                'legacy' => true,
+            ];
+        }
+    }
+
+    ksort($out);
     echo json_encode($out);
 }

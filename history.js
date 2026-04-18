@@ -53,24 +53,43 @@ function HistoryView() {
           if (prevWinner) { holder = prevWinner; retains = true; }
         }
 
+        // Legacy years have a stored aggregate result but no individual match data
+        const isLegacy = !!summary[year]?.legacy;
+
         return (
           <div key={year} className="bg-white rounded-2xl shadow-sm overflow-hidden">
-            <button className="w-full px-6 py-4 flex items-center justify-between hover:bg-slate-50 transition-colors"
-                    onClick={() => loadYear(year)}>
-              <span className="text-lg font-bold text-slate-800">{year}</span>
-              <div className="flex items-center gap-4">
-                <span className={`text-xl font-black mono ${winner === 'blue' ? 'text-blue-600' : 'text-slate-400'}`}>{fmtPts(bp)}</span>
-                <span className="text-slate-300">–</span>
-                <span className={`text-xl font-black mono ${winner === 'red'  ? 'text-red-600'  : 'text-slate-400'}`}>{fmtPts(rp)}</span>
-                {holder && (
-                  <span className={`text-xs font-bold px-2 py-0.5 rounded ${
-                    holder === 'blue' ? 'bg-blue-100 text-blue-700' : 'bg-red-100 text-red-700'
-                  }`}>{TEAM[holder].label} {retains ? 'retains' : 'wins'}</span>
-                )}
-                <span className="text-slate-300 text-xs">{selYear === year ? '▲' : '▼'}</span>
+            {isLegacy ? (
+              <div className="w-full px-6 py-4 flex items-center justify-between">
+                <span className="text-lg font-bold text-slate-800">{year}</span>
+                <div className="flex items-center gap-4">
+                  <span className={`text-xl font-black mono ${winner === 'blue' ? 'text-blue-600' : 'text-slate-400'}`}>{fmtPts(bp)}</span>
+                  <span className="text-slate-300">–</span>
+                  <span className={`text-xl font-black mono ${winner === 'red'  ? 'text-red-600'  : 'text-slate-400'}`}>{fmtPts(rp)}</span>
+                  {holder && (
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded ${
+                      holder === 'blue' ? 'bg-blue-100 text-blue-700' : 'bg-red-100 text-red-700'
+                    }`}>{TEAM[holder].label} {retains ? 'retains' : 'wins'}</span>
+                  )}
+                </div>
               </div>
-            </button>
-            {selYear === year && (
+            ) : (
+              <button className="w-full px-6 py-4 flex items-center justify-between hover:bg-slate-50 transition-colors"
+                      onClick={() => loadYear(year)}>
+                <span className="text-lg font-bold text-slate-800">{year}</span>
+                <div className="flex items-center gap-4">
+                  <span className={`text-xl font-black mono ${winner === 'blue' ? 'text-blue-600' : 'text-slate-400'}`}>{fmtPts(bp)}</span>
+                  <span className="text-slate-300">–</span>
+                  <span className={`text-xl font-black mono ${winner === 'red'  ? 'text-red-600'  : 'text-slate-400'}`}>{fmtPts(rp)}</span>
+                  {holder && (
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded ${
+                      holder === 'blue' ? 'bg-blue-100 text-blue-700' : 'bg-red-100 text-red-700'
+                    }`}>{TEAM[holder].label} {retains ? 'retains' : 'wins'}</span>
+                  )}
+                  <span className="text-slate-300 text-xs">{selYear === year ? '▲' : '▼'}</span>
+                </div>
+              </button>
+            )}
+            {!isLegacy && selYear === year && (
               <div className="border-t border-slate-100 px-6 py-4">
                 {!detail ? <Spinner /> : <YearDetail rows={detail} />}
               </div>
