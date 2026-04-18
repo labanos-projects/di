@@ -51,7 +51,7 @@
       </div>
     </header>
 
-    <!-- ── MATCHES TAB ─────────────────────────────────────────────────── -->
+    <!-- ── MATCHES TAB ─────────────────────────────────────── -->
     <div id="tab-matches-content" class="max-w-4xl mx-auto px-4 py-6 space-y-4">
 
       <!-- Setup New Year (collapsible) -->
@@ -157,7 +157,7 @@
       </button>
     </div>
 
-    <!-- ── PLAYERS TAB ─────────────────────────────────────────────────── -->
+    <!-- ── PLAYERS TAB ─────────────────────────────────────── -->
     <div id="tab-players-content" class="hidden max-w-4xl mx-auto px-4 py-6">
 
       <div class="bg-white rounded-2xl shadow p-4 mb-6">
@@ -202,46 +202,76 @@
       </div>
     </div>
 
-    <!-- ── PAIRINGS TAB ────────────────────────────────────────────────── -->
+    <!-- ── PAIRINGS TAB ────────────────────────────────────── -->
     <div id="tab-pairings-content" class="hidden max-w-5xl mx-auto px-4 py-6 space-y-4">
 
       <div class="bg-white rounded-2xl shadow p-5">
         <h2 class="font-bold text-lg mb-1">🎯 Captain's Pairing Assistant</h2>
         <p class="text-sm text-gray-500 mb-4">
-          Explore any proposed matchup. The model combines career format strength, partner chemistry,
-          and direct head-to-head history into a single predicted win probability.
+          Analyze a specific matchup, or let the tool suggest the best opposing lineup against a
+          locked pair. Scoring combines career format strength, partner chemistry (2v2), and
+          direct head-to-head history (smoothed for small samples).
         </p>
 
-        <!-- Step 1: Format -->
+        <!-- Mode toggle -->
+        <div class="mb-5">
+          <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Mode</label>
+          <div class="inline-flex rounded-lg bg-gray-100 p-1">
+            <button id="pa-mode-analyze" onclick="setPaMode('analyze')"></button>
+            <button id="pa-mode-suggest" onclick="setPaMode('suggest')"></button>
+          </div>
+        </div>
+
+        <!-- Format (shared) -->
         <div class="mb-5">
           <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Format</label>
           <div id="pa-format-buttons" class="flex flex-wrap gap-2"></div>
         </div>
 
-        <!-- Step 2: Players -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-5 mb-4">
-          <div>
-            <label class="block text-xs font-bold text-blue-700 uppercase tracking-wide mb-2">🔵 Blue Team</label>
-            <div id="pa-blue-pickers" class="space-y-2"></div>
+        <!-- ANALYZE MODE -->
+        <div id="pa-analyze-section">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-5 mb-4">
+            <div>
+              <label class="block text-xs font-bold text-blue-700 uppercase tracking-wide mb-2">🔵 Blue Team</label>
+              <div id="pa-blue-pickers" class="space-y-2"></div>
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-red-700 uppercase tracking-wide mb-2">🔴 Red Team</label>
+              <div id="pa-red-pickers" class="space-y-2"></div>
+            </div>
           </div>
-          <div>
-            <label class="block text-xs font-bold text-red-700 uppercase tracking-wide mb-2">🔴 Red Team</label>
-            <div id="pa-red-pickers" class="space-y-2"></div>
+          <div class="flex items-center gap-3">
+            <button onclick="analyzePairing()"
+              class="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-5 py-2 text-sm font-semibold transition">
+              Analyze Matchup
+            </button>
+            <button onclick="clearPairing()"
+              class="text-gray-500 hover:text-gray-700 text-sm px-3 py-2">Clear</button>
           </div>
         </div>
 
-        <!-- Step 3: Analyze -->
-        <div class="flex items-center gap-3">
-          <button onclick="analyzePairing()"
-            class="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-5 py-2 text-sm font-semibold transition">
-            Analyze Matchup
-          </button>
-          <button onclick="clearPairing()"
-            class="text-gray-500 hover:text-gray-700 text-sm px-3 py-2">
-            Clear
-          </button>
-          <span id="pa-status" class="text-sm"></span>
+        <!-- SUGGEST MODE -->
+        <div id="pa-suggest-section" class="hidden">
+          <div class="mb-4">
+            <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Lock team</label>
+            <div id="pa-locked-team-buttons" class="flex gap-2"></div>
+            <p class="text-xs text-gray-400 mt-1">Pick the team whose lineup is already decided — the other team's best response will be suggested.</p>
+          </div>
+          <div class="mb-4">
+            <label id="pa-locked-label" class="block text-xs font-bold uppercase tracking-wide mb-2"></label>
+            <div id="pa-locked-pickers" class="space-y-2"></div>
+          </div>
+          <div class="flex items-center gap-3">
+            <button onclick="suggestPairings()"
+              class="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-5 py-2 text-sm font-semibold transition">
+              Find Best Opponent
+            </button>
+            <button onclick="clearPairing()"
+              class="text-gray-500 hover:text-gray-700 text-sm px-3 py-2">Clear</button>
+          </div>
         </div>
+
+        <div class="mt-3"><span id="pa-status" class="text-sm"></span></div>
       </div>
 
       <!-- Results -->
@@ -261,7 +291,7 @@
     let currentYear    = null;
     let currentRound   = 1;
 
-    // ── Auth ──────────────────────────────────────────────────────────────────
+    // ── Auth ───────────────────────────────────────────────────────────────────────
     function checkPassword() {
       if (document.getElementById('pw-input').value === ADMIN_PASSWORD) {
         document.getElementById('auth-gate').classList.add('hidden');
@@ -275,7 +305,7 @@
       if (e.key === 'Enter') checkPassword();
     });
 
-    // ── Tabs ──────────────────────────────────────────────────────────────────
+    // ── Tabs ───────────────────────────────────────────────────────────────────────
     function showTab(name) {
       ['matches','players','pairings'].forEach(t => {
         document.getElementById(`tab-${t}-content`).classList.toggle('hidden', t !== name);
@@ -288,12 +318,12 @@
       if (name === 'pairings') initPairings();
     }
 
-    // ── Init ──────────────────────────────────────────────────────────────────
+    // ── Init ───────────────────────────────────────────────────────────────────────
     async function init() {
       await Promise.all([refreshYears(), refreshPlayerLists()]);
     }
 
-    // ── Year dropdown (dynamic) ───────────────────────────────────────────────
+    // ── Year dropdown (dynamic) ───────────────────────────────────────────────────
     async function refreshYears() {
       const res   = await fetch(`${API}/admin.php?action=years`);
       const years = await res.json();
@@ -304,7 +334,7 @@
       if (years.length) currentYear = years[0];
     }
 
-    // ── New Year panel ────────────────────────────────────────────────────────
+    // ── New Year panel ─────────────────────────────────────────────────────────────
     function toggleNewYear() {
       const panel = document.getElementById('new-year-panel');
       const arrow = document.getElementById('new-year-arrow');
@@ -356,7 +386,7 @@
       redPlayers  = allPlayers.filter(p => p.team === 'red').sort((a,b) => a.name.localeCompare(b.name));
     }
 
-    // ── Matches tab ───────────────────────────────────────────────────────────
+    // ── Matches tab ─────────────────────────────────────────────────────────────────
     async function loadMatches() {
       currentYear  = parseInt(document.getElementById('year-select').value);
       currentRound = parseInt(document.getElementById('round-select').value);
@@ -579,7 +609,7 @@
       btn.disabled = false;
     }
 
-    // ── Players tab ───────────────────────────────────────────────────────────
+    // ── Players tab ─────────────────────────────────────────────────────────────────
     async function loadPlayers() {
       document.getElementById('players-loading').classList.remove('hidden');
       await refreshPlayerLists();
@@ -724,22 +754,48 @@
       } catch(e) { status.textContent = '✗ Network error'; status.className = 'text-sm text-red-600'; }
     }
 
-    // ── Pairings tab ──────────────────────────────────────────────────────────
+    // ── Pairings tab ───────────────────────────────────────────────────────────────
     const PA_FORMATS = [
       { value: 'fourball',  label: 'Fourball'  },
       { value: 'greensome', label: 'Greensome' },
       { value: 'foursome',  label: 'Foursome'  },
       { value: 'singles',   label: 'Singles'   },
     ];
-    let paFormat = 'fourball';
-    let paInited = false;
+    let paFormat     = 'fourball';
+    let paMode       = 'analyze';   // 'analyze' | 'suggest'
+    let paLockedTeam = 'red';       // team whose lineup is fixed in suggest mode
+    let paInited     = false;
 
     async function initPairings() {
       if (paInited) return;
       if (!allPlayers.length) await refreshPlayerLists();
+      renderPaModeButtons();
       renderPaFormatButtons();
       renderPaPickers();
+      renderPaLockedTeamButtons();
+      renderPaLockedPickers();
       paInited = true;
+    }
+
+    function renderPaModeButtons() {
+      const a = document.getElementById('pa-mode-analyze');
+      const s = document.getElementById('pa-mode-suggest');
+      const cls = on => 'px-4 py-1.5 rounded-md text-sm font-semibold transition ' +
+        (on ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700');
+      a.className = cls(paMode === 'analyze');
+      s.className = cls(paMode === 'suggest');
+      a.textContent = 'Analyze matchup';
+      s.textContent = 'Suggest opponent';
+    }
+
+    function setPaMode(m) {
+      paMode = m;
+      renderPaModeButtons();
+      document.getElementById('pa-analyze-section').classList.toggle('hidden', m !== 'analyze');
+      document.getElementById('pa-suggest-section').classList.toggle('hidden', m !== 'suggest');
+      const r = document.getElementById('pa-results');
+      r.classList.add('hidden'); r.innerHTML = '';
+      document.getElementById('pa-status').textContent = '';
     }
 
     function renderPaFormatButtons() {
@@ -758,10 +814,48 @@
       paFormat = f;
       renderPaFormatButtons();
       renderPaPickers();
+      renderPaLockedPickers();
       // Clear stale results when format changes
       const r = document.getElementById('pa-results');
       r.classList.add('hidden');
       r.innerHTML = '';
+    }
+
+    function renderPaLockedTeamButtons() {
+      const host = document.getElementById('pa-locked-team-buttons');
+      host.innerHTML = ['blue','red'].map(t => {
+        const on = paLockedTeam === t;
+        const emoji = t === 'blue' ? '🔵' : '🔴';
+        const onCls = t === 'blue' ? 'bg-blue-600 text-white' : 'bg-red-600 text-white';
+        const offCls = 'bg-gray-100 text-gray-600 hover:bg-gray-200';
+        return `<button onclick="setPaLockedTeam('${t}')"
+          class="px-4 py-1.5 rounded-lg text-sm font-semibold transition ${on ? onCls : offCls}">
+          ${emoji} Lock ${t.charAt(0).toUpperCase() + t.slice(1)}</button>`;
+      }).join('');
+    }
+
+    function setPaLockedTeam(t) {
+      paLockedTeam = t;
+      renderPaLockedTeamButtons();
+      renderPaLockedPickers();
+      const r = document.getElementById('pa-results');
+      r.classList.add('hidden'); r.innerHTML = '';
+    }
+
+    function renderPaLockedPickers() {
+      const count = paFormat === 'singles' ? 1 : 2;
+      const pool  = paLockedTeam === 'blue' ? bluePlayers : redPlayers;
+      const emoji = paLockedTeam === 'blue' ? '🔵' : '🔴';
+      const name  = paLockedTeam === 'blue' ? 'Blue' : 'Red';
+      const lbl   = document.getElementById('pa-locked-label');
+      lbl.className = `block text-xs font-bold uppercase tracking-wide mb-2 ${paLockedTeam === 'blue' ? 'text-blue-700' : 'text-red-700'}`;
+      lbl.textContent = `${emoji} ${name} team (locked)`;
+      document.getElementById('pa-locked-pickers').innerHTML =
+        Array.from({length: count}, (_, i) => `
+          <select class="w-full border rounded-lg px-3 py-2 text-sm pa-locked-pick">
+            <option value="">— select ${name.toLowerCase()} ${count > 1 ? 'player ' + (i+1) : 'player'} —</option>
+            ${pool.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('')}
+          </select>`).join('');
     }
 
     function renderPaPickers() {
@@ -777,7 +871,7 @@
     }
 
     function clearPairing() {
-      document.querySelectorAll('.pa-blue-pick, .pa-red-pick').forEach(s => s.value = '');
+      document.querySelectorAll('.pa-blue-pick, .pa-red-pick, .pa-locked-pick').forEach(s => s.value = '');
       const r = document.getElementById('pa-results');
       r.classList.add('hidden');
       r.innerHTML = '';
@@ -787,6 +881,12 @@
 
     function getPaIds(teamClass) {
       return Array.from(document.querySelectorAll(`.pa-${teamClass}-pick`))
+        .map(s => parseInt(s.value))
+        .filter(Boolean);
+    }
+
+    function getPaLockedIds() {
+      return Array.from(document.querySelectorAll('.pa-locked-pick'))
         .map(s => parseInt(s.value))
         .filter(Boolean);
     }
@@ -828,6 +928,134 @@
         status.textContent = '✗ Network error';
         status.className = 'text-sm text-red-600';
       }
+    }
+
+    async function suggestPairings() {
+      const status  = document.getElementById('pa-status');
+      const results = document.getElementById('pa-results');
+      const lockedIds = getPaLockedIds();
+      const need = paFormat === 'singles' ? 1 : 2;
+
+      if (lockedIds.length !== need) {
+        status.textContent = `⚠ Select ${need} player${need>1?'s':''} for the locked team`;
+        status.className = 'text-sm text-yellow-600';
+        return;
+      }
+      if (need === 2 && lockedIds[0] === lockedIds[1]) {
+        status.textContent = '⚠ Same player selected twice';
+        status.className = 'text-sm text-yellow-600';
+        return;
+      }
+
+      status.textContent = 'Scouring opponents…';
+      status.className = 'text-sm text-gray-400';
+      results.classList.add('hidden');
+
+      try {
+        const qs = `format=${paFormat}&locked_team=${paLockedTeam}&locked_ids=${lockedIds.join(',')}&limit=10`;
+        const res = await fetch(`${API}/pair_suggest.php?${qs}`);
+        const data = await res.json();
+        if (data.error) {
+          status.textContent = '✗ ' + data.error;
+          status.className = 'text-sm text-red-600';
+          return;
+        }
+        status.textContent = '';
+        renderSuggestionResults(data);
+      } catch(e) {
+        status.textContent = '✗ Network error';
+        status.className = 'text-sm text-red-600';
+      }
+    }
+
+    function renderSuggestionResults(data) {
+      const results = document.getElementById('pa-results');
+      const fmtLabel = data.format.charAt(0).toUpperCase() + data.format.slice(1);
+      const oppEmoji = data.opposing_team === 'blue' ? '🔵' : '🔴';
+      const oppColor = data.opposing_team === 'blue' ? 'text-blue-600' : 'text-red-600';
+      const oppBg    = data.opposing_team === 'blue' ? 'bg-blue-600'   : 'bg-red-600';
+      const lockedEmoji = data.locked_team === 'blue' ? '🔵' : '🔴';
+      const lockedNames = data.locked_players.map(p => p.name).join(' & ');
+      const oppName = data.opposing_team.charAt(0).toUpperCase() + data.opposing_team.slice(1);
+
+      if (!data.suggestions || !data.suggestions.length) {
+        results.innerHTML = `<div class="bg-white rounded-2xl shadow p-5 text-sm text-gray-600">
+          No valid ${oppName} candidates for this format.
+        </div>`;
+        results.classList.remove('hidden');
+        results.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        return;
+      }
+
+      const top = data.suggestions[0];
+      const topPct = Math.round(top.win_probability * 100);
+      const topNames = top.players.map(p => p.name).join(' & ');
+      const isSingles = data.format === 'singles';
+
+      // Top-pick hero card
+      let html = `
+        <div class="bg-white rounded-2xl shadow p-5">
+          <div class="flex items-center justify-between mb-3">
+            <div>
+              <h3 class="font-bold text-lg">${oppEmoji} Best ${oppName} ${isSingles ? 'pick' : 'pair'} vs ${lockedEmoji} ${esc(lockedNames)}</h3>
+              <p class="text-xs text-gray-500 mt-1">Evaluated ${data.candidates_evaluated} candidate${data.candidates_evaluated===1?'':'s'}</p>
+            </div>
+            <span class="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full font-medium">${esc(fmtLabel)}</span>
+          </div>
+          <div class="text-2xl font-bold mb-1 ${oppColor}">${esc(topNames)}</div>
+          <div class="text-sm text-gray-600 mb-3">
+            <span class="font-semibold ${oppColor}">${topPct}% win probability</span> vs locked pair
+          </div>
+          <div class="w-full h-4 flex rounded-full overflow-hidden border">
+            <div class="${oppBg}" style="width:${topPct}%"></div>
+            <div class="bg-gray-200" style="width:${100-topPct}%"></div>
+          </div>
+        </div>`;
+
+      // Ranked table of all candidates
+      html += `
+        <div class="bg-white rounded-2xl shadow p-5 overflow-x-auto">
+          <h3 class="font-bold text-lg mb-1">All candidates, ranked</h3>
+          <p class="text-xs text-gray-500 mb-3">Sorted by ${oppName}'s win probability against ${esc(lockedNames)}. Small-sample matchups pull toward 50% (Laplace-smoothed, k=4).</p>
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="text-xs uppercase tracking-wide text-gray-500 border-b">
+                <th class="text-left py-2 font-semibold w-8">#</th>
+                <th class="text-left py-2 font-semibold">Candidate</th>
+                <th class="text-right py-2 font-semibold">Win %</th>
+                <th class="text-left py-2 pl-4 font-semibold w-40">Bar</th>
+                <th class="text-right py-2 font-semibold">Strength</th>
+                ${!isSingles ? '<th class="text-right py-2 font-semibold">Chemistry</th>' : ''}
+                <th class="text-right py-2 font-semibold">H2H vs locked</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${data.suggestions.map((s, i) => {
+                const pct = Math.round(s.win_probability * 100);
+                const names = s.players.map(p => p.name).join(' & ');
+                return `
+                  <tr class="border-b last:border-0 ${i===0 ? 'bg-yellow-50' : ''}">
+                    <td class="py-2 font-semibold ${i===0 ? oppColor : 'text-gray-500'}">${i+1}</td>
+                    <td class="py-2 font-medium">${esc(names)}</td>
+                    <td class="py-2 text-right font-mono font-semibold ${oppColor}">${pct}%</td>
+                    <td class="py-2 pl-4">
+                      <div class="w-full h-2 flex rounded-full overflow-hidden bg-gray-100 border">
+                        <div class="${oppBg}" style="width:${pct}%"></div>
+                      </div>
+                    </td>
+                    <td class="py-2 text-right font-mono">${(s.pair_strength*100).toFixed(0)}%</td>
+                    ${!isSingles ? `<td class="py-2 text-right font-mono">${(s.partner_rate*100).toFixed(0)}%<span class="text-xs text-gray-400 ml-1">(${s.partner_sample})</span></td>` : ''}
+                    <td class="py-2 text-right text-gray-500">${s.h2h_sample} match${s.h2h_sample===1?'':'es'}</td>
+                  </tr>`;
+              }).join('')}
+            </tbody>
+          </table>
+          <p class="text-xs text-gray-400 mt-3">Win % clamped to [5%, 95%]. "Strength" = smoothed career win-rate in this format. "Chemistry" = partnership win-rate in this format (sample size in parentheses).</p>
+        </div>`;
+
+      results.innerHTML = html;
+      results.classList.remove('hidden');
+      results.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
     function pctBar(bluePct) {
