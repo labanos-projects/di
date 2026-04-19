@@ -43,6 +43,10 @@
             class="tab-btn px-4 py-1.5 rounded-lg text-sm font-semibold text-gray-500 hover:bg-gray-100 transition">
             Players
           </button>
+          <button onclick="showTab('roster')" id="tab-roster"
+            class="tab-btn px-4 py-1.5 rounded-lg text-sm font-semibold text-gray-500 hover:bg-gray-100 transition">
+            Roster
+          </button>
           <button onclick="showTab('pairings')" id="tab-pairings"
             class="tab-btn px-4 py-1.5 rounded-lg text-sm font-semibold text-gray-500 hover:bg-gray-100 transition">
             Pairings
@@ -51,7 +55,7 @@
       </div>
     </header>
 
-    <!-- ── MATCHES TAB ─────────────────────────────────── -->
+    <!-- ── MATCHES TAB ─────────────────────────────────────────────────── -->
     <div id="tab-matches-content" class="max-w-4xl mx-auto px-4 py-6 space-y-4">
 
       <!-- Setup New Year (collapsible) -->
@@ -157,7 +161,7 @@
       </button>
     </div>
 
-    <!-- ── PLAYERS TAB ─────────────────────────────────── -->
+    <!-- ── PLAYERS TAB ─────────────────────────────────────────────────── -->
     <div id="tab-players-content" class="hidden max-w-4xl mx-auto px-4 py-6">
 
       <div class="bg-white rounded-2xl shadow p-4 mb-6">
@@ -202,7 +206,87 @@
       </div>
     </div>
 
-    <!-- ── PAIRINGS TAB ────────────────────────────────── -->
+    <!-- ── ROSTER TAB ──────────────────────────────────────────────────── -->
+    <div id="tab-roster-content" class="hidden max-w-4xl mx-auto px-4 py-6 space-y-4">
+
+      <div class="bg-white rounded-2xl shadow p-5">
+        <div class="flex flex-wrap items-end justify-between gap-4 mb-3">
+          <div>
+            <h2 class="font-bold text-lg">🗒 Yearly Roster</h2>
+            <p class="text-sm text-gray-500 mt-1">
+              Pick who's playing this year. This controls which players appear in
+              match dropdowns and pairing suggestions for the selected year.
+              Past years derive their roster from actual match results — you only
+              need to set this for the current/upcoming year.
+            </p>
+          </div>
+          <div class="flex items-end gap-3">
+            <div>
+              <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Year</label>
+              <select id="roster-year-select" class="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option>Loading…</option>
+              </select>
+            </div>
+            <button onclick="loadRoster()"
+              class="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-4 py-2 text-sm font-semibold transition">
+              Load
+            </button>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2 mb-4">
+          <span id="roster-source-badge" class="hidden text-xs px-2 py-0.5 rounded-full font-medium"></span>
+          <span id="roster-count-badge" class="hidden text-xs px-2 py-0.5 rounded-full font-medium bg-gray-100 text-gray-600"></span>
+        </div>
+
+        <div id="roster-loading" class="hidden text-center py-12 text-gray-400">
+          <div class="text-4xl mb-2">⏳</div><p>Loading roster…</p>
+        </div>
+
+        <div id="roster-body" class="grid grid-cols-2 gap-6">
+          <div>
+            <div class="flex items-center justify-between mb-3">
+              <h3 class="font-bold text-blue-700 flex items-center gap-2">
+                🔵 Blue Team
+                <span id="roster-blue-count" class="text-xs bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full font-normal"></span>
+              </h3>
+              <div class="flex gap-1">
+                <button onclick="rosterToggleAll('blue', true)"
+                  class="text-xs text-blue-600 hover:bg-blue-50 px-2 py-1 rounded">All</button>
+                <button onclick="rosterToggleAll('blue', false)"
+                  class="text-xs text-gray-500 hover:bg-gray-50 px-2 py-1 rounded">None</button>
+              </div>
+            </div>
+            <div id="roster-blue-list" class="space-y-1"></div>
+          </div>
+          <div>
+            <div class="flex items-center justify-between mb-3">
+              <h3 class="font-bold text-red-700 flex items-center gap-2">
+                🔴 Red Team
+                <span id="roster-red-count" class="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full font-normal"></span>
+              </h3>
+              <div class="flex gap-1">
+                <button onclick="rosterToggleAll('red', true)"
+                  class="text-xs text-red-600 hover:bg-red-50 px-2 py-1 rounded">All</button>
+                <button onclick="rosterToggleAll('red', false)"
+                  class="text-xs text-gray-500 hover:bg-gray-50 px-2 py-1 rounded">None</button>
+              </div>
+            </div>
+            <div id="roster-red-list" class="space-y-1"></div>
+          </div>
+        </div>
+
+        <div class="mt-5 flex items-center gap-3 pt-4 border-t">
+          <button onclick="saveRoster()"
+            class="bg-green-600 hover:bg-green-700 text-white rounded-lg px-5 py-2 text-sm font-semibold transition">
+            Save Roster
+          </button>
+          <span id="roster-save-status" class="text-sm"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── PAIRINGS TAB ────────────────────────────────────────────────── -->
     <div id="tab-pairings-content" class="hidden max-w-5xl mx-auto px-4 py-6 space-y-4">
 
       <div class="bg-white rounded-2xl shadow p-5">
@@ -296,7 +380,15 @@
     let currentYear    = null;
     let currentRound   = 1;
 
-    // ── Auth ─────────────────────────────────────────────────
+    // Roster state — drives who is eligible in match dropdowns and pairing suggestions.
+    // currentRoster is a Set<number> of player_ids eligible for currentYear.
+    // rosterExplicit=false means we fell back to "all active players" for this year,
+    // which is the case for any year where no explicit roster has been saved yet.
+    let currentRoster  = new Set();
+    let rosterExplicit = false;
+    let rosterLoadedYear = null;
+
+    // ── Auth ──────────────────────────────────────────────────────────────────
     function checkPassword() {
       if (document.getElementById('pw-input').value === ADMIN_PASSWORD) {
         document.getElementById('auth-gate').classList.add('hidden');
@@ -310,9 +402,9 @@
       if (e.key === 'Enter') checkPassword();
     });
 
-    // ── Tabs ─────────────────────────────────────────────────
+    // ── Tabs ──────────────────────────────────────────────────────────────────
     function showTab(name) {
-      ['matches','players','pairings'].forEach(t => {
+      ['matches','players','roster','pairings'].forEach(t => {
         document.getElementById(`tab-${t}-content`).classList.toggle('hidden', t !== name);
         const btn = document.getElementById(`tab-${t}`);
         btn.className = t === name
@@ -320,15 +412,16 @@
           : 'tab-btn px-4 py-1.5 rounded-lg text-sm font-semibold text-gray-500 hover:bg-gray-100 transition';
       });
       if (name === 'players')  loadPlayers();
+      if (name === 'roster')   openRosterTab();
       if (name === 'pairings') initPairings();
     }
 
-    // ── Init ─────────────────────────────────────────────────
+    // ── Init ──────────────────────────────────────────────────────────────────
     async function init() {
       await Promise.all([refreshYears(), refreshPlayerLists()]);
     }
 
-    // ── Year dropdown (dynamic) ────────────────────────────────────────
+    // ── Year dropdown (dynamic) ───────────────────────────────────────────────
     async function refreshYears() {
       const res   = await fetch(`${API}/admin.php?action=years`);
       const years = await res.json();
@@ -336,10 +429,20 @@
       sel.innerHTML = years.length
         ? years.map(y => `<option value="${y}">${y}</option>`).join('')
         : '<option value="">— no years —</option>';
+      // Mirror the same options into the roster tab's year selector
+      const rsel = document.getElementById('roster-year-select');
+      if (rsel) {
+        rsel.innerHTML = years.length
+          ? years.map(y => `<option value="${y}">${y}</option>`).join('')
+          : '<option value="">— no years —</option>';
+      }
       if (years.length) currentYear = years[0];
+      // Eager-load the roster for the default year so match dropdowns are filtered
+      // immediately the first time Matches or Pairings is opened.
+      if (years.length) { try { await refreshRoster(years[0]); } catch(e) {} }
     }
 
-    // ── New Year panel ───────────────────────────────────────────────
+    // ── New Year panel ────────────────────────────────────────────────────────
     function toggleNewYear() {
       const panel = document.getElementById('new-year-panel');
       const arrow = document.getElementById('new-year-arrow');
@@ -391,7 +494,162 @@
       redPlayers  = allPlayers.filter(p => p.team === 'red').sort((a,b) => a.name.localeCompare(b.name));
     }
 
-    // ── Matches tab ─────────────────────────────────────────────────
+    // ── Roster helpers ────────────────────────────────────────────────────────
+    // Fetches /roster.php?year=Y and caches the result in currentRoster / rosterExplicit.
+    // If the year has no explicit roster, the backend falls back to "all active
+    // players" — we mirror that into currentRoster so filtering logic is uniform.
+    async function refreshRoster(year) {
+      if (!year) { currentRoster = new Set(); rosterExplicit = false; rosterLoadedYear = null; return; }
+      const res = await fetch(`${API}/roster.php?year=${year}`);
+      const data = await res.json();
+      currentRoster  = new Set((data.players || []).map(p => p.id));
+      rosterExplicit = !!data.explicit;
+      rosterLoadedYear = year;
+    }
+
+    // bluePlayers / redPlayers filtered to the current roster.
+    // Fall back to the full team list if the roster is empty (eg. on first load
+    // before refreshRoster() has finished) so the UI never shows blank dropdowns.
+    function rosterBlue() {
+      if (!currentRoster.size) return bluePlayers;
+      return bluePlayers.filter(p => currentRoster.has(p.id));
+    }
+    function rosterRed() {
+      if (!currentRoster.size) return redPlayers;
+      return redPlayers.filter(p => currentRoster.has(p.id));
+    }
+
+    // For match-card dropdowns: include rostered players + any names already
+    // assigned to this match (so historical matches with off-roster players
+    // still render their current selection).
+    function rosterPoolForEdit(team, assignedNames) {
+      const teamPool = team === 'blue' ? bluePlayers : redPlayers;
+      if (!currentRoster.size) return teamPool;
+      const rostered = new Set(teamPool.filter(p => currentRoster.has(p.id)).map(p => p.id));
+      const keep     = new Set(rostered);
+      for (const nm of assignedNames) {
+        if (!nm) continue;
+        const p = teamPool.find(x => x.name === nm);
+        if (p) keep.add(p.id);
+      }
+      return teamPool.filter(p => keep.has(p.id));
+    }
+
+    // ── Roster tab ────────────────────────────────────────────────────────────
+    async function openRosterTab() {
+      if (!allPlayers.length) await refreshPlayerLists();
+      const rsel = document.getElementById('roster-year-select');
+      // Default the roster year selector to currentYear when entering the tab
+      if (currentYear && rsel && rsel.value != currentYear) rsel.value = currentYear;
+      await loadRoster();
+    }
+
+    async function loadRoster() {
+      const rsel  = document.getElementById('roster-year-select');
+      const year  = parseInt(rsel.value);
+      const body  = document.getElementById('roster-body');
+      const load  = document.getElementById('roster-loading');
+      if (!year) { body.classList.add('hidden'); return; }
+
+      body.classList.add('hidden');
+      load.classList.remove('hidden');
+      document.getElementById('roster-save-status').textContent = '';
+
+      try {
+        await refreshRoster(year);
+      } catch(e) {
+        load.classList.add('hidden');
+        document.getElementById('roster-save-status').textContent = '✗ Failed to load roster';
+        document.getElementById('roster-save-status').className   = 'text-sm text-red-600';
+        return;
+      }
+
+      load.classList.add('hidden');
+      body.classList.remove('hidden');
+      renderRoster();
+    }
+
+    function renderRoster() {
+      const src = document.getElementById('roster-source-badge');
+      if (rosterExplicit) {
+        src.textContent = '✓ Saved roster'; src.className = 'text-xs px-2 py-0.5 rounded-full font-medium bg-green-100 text-green-700';
+      } else {
+        src.textContent = 'No saved roster — showing all active players'; src.className = 'text-xs px-2 py-0.5 rounded-full font-medium bg-amber-100 text-amber-700';
+      }
+      src.classList.remove('hidden');
+
+      const rowHtml = (p) => {
+        const checked = currentRoster.has(p.id) ? 'checked' : '';
+        const teamCls = p.team === 'blue' ? 'hover:bg-blue-50' : 'hover:bg-red-50';
+        return `
+          <label class="flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer ${teamCls}">
+            <input type="checkbox" data-player-id="${p.id}" data-team="${p.team}"
+              class="roster-check" ${checked} onchange="onRosterToggle()">
+            <span class="text-sm">${esc(p.name)}</span>
+          </label>`;
+      };
+      document.getElementById('roster-blue-list').innerHTML = bluePlayers.map(rowHtml).join('');
+      document.getElementById('roster-red-list').innerHTML  = redPlayers.map(rowHtml).join('');
+      updateRosterCounts();
+    }
+
+    function updateRosterCounts() {
+      const blueChecked = [...document.querySelectorAll('.roster-check[data-team="blue"]:checked')].length;
+      const redChecked  = [...document.querySelectorAll('.roster-check[data-team="red"]:checked')].length;
+      document.getElementById('roster-blue-count').textContent = `${blueChecked} / ${bluePlayers.length}`;
+      document.getElementById('roster-red-count').textContent  = `${redChecked} / ${redPlayers.length}`;
+      const total = blueChecked + redChecked;
+      const badge = document.getElementById('roster-count-badge');
+      badge.textContent = `${total} player${total===1?'':'s'} selected`;
+      badge.classList.remove('hidden');
+    }
+
+    function onRosterToggle() {
+      // Sync the checkbox state into the currentRoster set so match / pairing
+      // dropdowns reflect the change as soon as you tick a box (even before Save).
+      currentRoster = new Set(
+        [...document.querySelectorAll('.roster-check:checked')].map(cb => parseInt(cb.dataset.playerId))
+      );
+      updateRosterCounts();
+    }
+
+    function rosterToggleAll(team, on) {
+      document.querySelectorAll(`.roster-check[data-team="${team}"]`).forEach(cb => { cb.checked = on; });
+      onRosterToggle();
+    }
+
+    async function saveRoster() {
+      const year   = parseInt(document.getElementById('roster-year-select').value);
+      const status = document.getElementById('roster-save-status');
+      if (!year) { status.textContent = '⚠ Pick a year first'; status.className = 'text-sm text-yellow-600'; return; }
+
+      const ids = [...document.querySelectorAll('.roster-check:checked')]
+        .map(cb => parseInt(cb.dataset.playerId));
+
+      status.textContent = 'Saving…'; status.className = 'text-sm text-gray-400';
+      try {
+        const res = await fetch(`${API}/admin.php`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'set_roster', year, player_ids: ids }),
+        });
+        const data = await res.json();
+        if (data.ok) {
+          status.textContent = `✓ Saved (${data.count} player${data.count===1?'':'s'})`;
+          status.className = 'text-sm text-green-600';
+          // Refresh cache + badges so the "Saved roster" pill shows immediately
+          await refreshRoster(year);
+          renderRoster();
+          // Refresh any pairings pickers that may be visible
+          if (typeof renderPaPickers === 'function') {
+            try { renderPaPickers(); renderPaLockedPickers(); } catch(e) {}
+          }
+        } else {
+          status.textContent = '✗ ' + (data.error || 'Error'); status.className = 'text-sm text-red-600';
+        }
+      } catch(e) { status.textContent = '✗ Network error'; status.className = 'text-sm text-red-600'; }
+    }
+
+    // ── Matches tab ───────────────────────────────────────────────────────────
     async function loadMatches() {
       currentYear  = parseInt(document.getElementById('year-select').value);
       currentRound = parseInt(document.getElementById('round-select').value);
@@ -400,6 +658,9 @@
       document.getElementById('matches-container').innerHTML = '';
       document.getElementById('add-match-btn').classList.add('hidden');
       document.getElementById('format-badge').classList.add('hidden');
+
+      // Keep the roster in sync with the selected year so dropdowns filter correctly.
+      try { await refreshRoster(currentYear); } catch(e) {}
 
       const res = await fetch(`${API}/admin.php?year=${currentYear}&round=${currentRound}`);
       currentMatches = await res.json();
@@ -473,6 +734,12 @@
         <option value="red"${winner==='red'?' selected':''}>🔴 Red wins</option>
         <option value="halved"${winner==='halved'?' selected':''}>🤝 Halved</option>`;
 
+      // Dropdowns use the roster for this year. Any already-assigned player
+      // is kept in the list even if no longer rostered, so you can still
+      // view / edit historical matches without losing the current selection.
+      const bluePool = rosterPoolForEdit('blue', [b1, b2]);
+      const redPool  = rosterPoolForEdit('red',  [r1, r2]);
+
       card.innerHTML = `
         <div class="flex items-center justify-between mb-4">
           <h3 class="font-bold text-lg">Match ${match.match_number}</h3>
@@ -488,12 +755,12 @@
         <div class="grid grid-cols-2 gap-4 mb-4">
           <div class="space-y-2">
             <p class="text-xs font-bold text-blue-600 uppercase tracking-wide">🔵 Blue</p>
-            <select class="w-full border rounded-lg px-2 py-1.5 text-sm blue1">${playerOptions(bluePlayers, b1)}</select>
-            ${!isSingles?`<select class="w-full border rounded-lg px-2 py-1.5 text-sm blue2">${playerOptions(bluePlayers, b2)}</select>`:''}</div>
+            <select class="w-full border rounded-lg px-2 py-1.5 text-sm blue1">${playerOptions(bluePool, b1)}</select>
+            ${!isSingles?`<select class="w-full border rounded-lg px-2 py-1.5 text-sm blue2">${playerOptions(bluePool, b2)}</select>`:''}</div>
           <div class="space-y-2">
             <p class="text-xs font-bold text-red-600 uppercase tracking-wide">🔴 Red</p>
-            <select class="w-full border rounded-lg px-2 py-1.5 text-sm red1">${playerOptions(redPlayers, r1)}</select>
-            ${!isSingles?`<select class="w-full border rounded-lg px-2 py-1.5 text-sm red2">${playerOptions(redPlayers, r2)}</select>`:''}
+            <select class="w-full border rounded-lg px-2 py-1.5 text-sm red1">${playerOptions(redPool, r1)}</select>
+            ${!isSingles?`<select class="w-full border rounded-lg px-2 py-1.5 text-sm red2">${playerOptions(redPool, r2)}</select>`:''}
           </div>
         </div>
         <div class="flex items-end gap-4 mb-4">
@@ -629,7 +896,7 @@
       btn.disabled = false;
     }
 
-    // ── Players tab ─────────────────────────────────────────────────
+    // ── Players tab ───────────────────────────────────────────────────────────
     async function loadPlayers() {
       document.getElementById('players-loading').classList.remove('hidden');
       await refreshPlayerLists();
@@ -774,7 +1041,7 @@
       } catch(e) { status.textContent = '✗ Network error'; status.className = 'text-sm text-red-600'; }
     }
 
-    // ── Pairings tab ────────────────────────────────────────────────
+    // ── Pairings tab ──────────────────────────────────────────────────────────
     const PA_FORMATS = [
       { value: 'fourball',  label: 'Fourball'  },
       { value: 'greensome', label: 'Greensome' },
@@ -788,8 +1055,18 @@
     let paInited     = false;
 
     async function initPairings() {
-      if (paInited) return;
       if (!allPlayers.length) await refreshPlayerLists();
+      // Make sure the roster reflects the current year every time this tab is
+      // opened — the matches tab may have changed years since the last visit.
+      if (currentYear && rosterLoadedYear !== currentYear) {
+        try { await refreshRoster(currentYear); } catch(e) {}
+      }
+      if (paInited) {
+        // Just refresh the pickers so they pick up any roster change
+        renderPaPickers();
+        renderPaLockedPickers();
+        return;
+      }
       renderPaModeButtons();
       renderPaFormatButtons();
       renderPaPickers();
@@ -892,7 +1169,7 @@
 
     function renderPaLockedPickers() {
       const count = paFormat === 'singles' ? 1 : 2;
-      const pool  = paLockedTeam === 'blue' ? bluePlayers : redPlayers;
+      const pool  = paLockedTeam === 'blue' ? rosterBlue() : rosterRed();
       const emoji = paLockedTeam === 'blue' ? '🔵' : '🔴';
       const name  = paLockedTeam === 'blue' ? 'Blue' : 'Red';
       const lbl   = document.getElementById('pa-locked-label');
@@ -914,8 +1191,8 @@
             <option value="">— select ${teamClass} ${count > 1 ? 'player ' + (i+1) : 'player'} —</option>
             ${pool.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('')}
           </select>`).join('');
-      document.getElementById('pa-blue-pickers').innerHTML = buildPickers(bluePlayers, 'blue');
-      document.getElementById('pa-red-pickers').innerHTML  = buildPickers(redPlayers,  'red');
+      document.getElementById('pa-blue-pickers').innerHTML = buildPickers(rosterBlue(), 'blue');
+      document.getElementById('pa-red-pickers').innerHTML  = buildPickers(rosterRed(),  'red');
     }
 
     function clearPairing() {
@@ -1000,7 +1277,8 @@
       results.classList.add('hidden');
 
       try {
-        const qs = `format=${paFormat}&locked_team=${paLockedTeam}&locked_ids=${lockedIds.join(',')}&limit=10&rank=${paRank}`;
+        const yearQs = currentYear ? `&year=${currentYear}` : '';
+        const qs = `format=${paFormat}&locked_team=${paLockedTeam}&locked_ids=${lockedIds.join(',')}&limit=10&rank=${paRank}${yearQs}`;
         const res = await fetch(`${API}/pair_suggest.php?${qs}`);
         const data = await res.json();
         if (data.error) {
