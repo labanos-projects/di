@@ -47,6 +47,16 @@ function run_migrations($pdo) {
         CONSTRAINT fk_mr_partner FOREIGN KEY (partner_id) REFERENCES players(id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
+    // Per-year roster. If there are no rows for a given year the year falls
+    // back to "all active players" (keeps past years working without back-fill).
+    $pdo->exec("CREATE TABLE IF NOT EXISTS roster_assignments (
+        year       INT NOT NULL,
+        player_id  INT NOT NULL,
+        PRIMARY KEY (year, player_id),
+        KEY idx_ra_player (player_id),
+        CONSTRAINT fk_ra_player FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
     // Allow NULL for upcoming matches (players scheduled, not yet played)
     // Safe to re-run — MySQL silently succeeds if column is already nullable
     try { $pdo->exec("ALTER TABLE match_results MODIFY COLUMN points TINYINT NULL COMMENT '0=loss 1=halved 2=win NULL=not played yet'"); } catch (Exception $e) {}
