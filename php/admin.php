@@ -9,8 +9,9 @@
 // POST {action:'merge_players'} -> reassign results from merge_id -> keep_id, delete merge_id
 // POST {action:'delete_player'} -> delete player (only if no results)
 // POST {action:'delete_match'}  -> delete match and all its results
+// POST {action:'set_roster'}    -> replace roster_assignments for a year
 // POST (no action)              -> replace match results (winner may be omitted for upcoming matches)
-// v1.8
+// v1.9
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
@@ -23,7 +24,7 @@ run_migrations($pdo);
 
 $method = $_SERVER['REQUEST_METHOD'];
 
-// ── GET ──────────────────────────────────────────────────────────────────────
+// ── GET ─────────────────────────────────────────────────────────────────
 if ($method === 'GET') {
 
     $action = $_GET['action'] ?? '';
@@ -97,12 +98,46 @@ if ($method === 'GET') {
     exit;
 }
 
-// ── POST ──────────────────────────────────────────────────────────────────────
+// ── POST ────────────────────────────────────────────────────────────────
 if ($method === 'POST') {
     $data   = json_decode(file_get_contents('php://input'), true);
     $action = $data['action'] ?? '';
 
-    // ── Add year (tournament + rounds) ─────────────────────────────────────
+    // ── Set roster for a year ─────────────────────────────────────────
+    // POST { action: 'set_roster', year: 2026, player_ids: [1,2,...] }
+    // Replaces all roster rows for that year. Empty player_ids clears the
+    // roster (which makes roster.php fall back to "all active players").
+    if ($action === 'set_roster') {
+        $year       = (int)($data['year'] ?? 0);
+        $player_ids = $data['player_ids'] ?? [];
+        if (!$year || $year < 2000 || $year > 2100) {
+            http_response_code(400);
+            echo json_encode(['error' => 'valid year required']);
+            exit;
+        }
+        if (!is_array($player_ids)) $player_ids = [];
+        $player_ids = array_values(array_unique(array_map('intval', $player_ids)));
+        $player_ids = array_filter($player_ids, function ($id) { return $id > 0; });
+
+        $pdo->beginTransaction();
+        try {
+            $pdo->prepare("DELETE FROM roster_assignments WHERE year = ?")->execute([$year]);
+            if (!empty($player_ids)) {
+                $stmt = $pdo->prepare("INSERT INTO roster_assignments (year, player_id) VALUES (?, ?)");
+                foreach ($player_ids as $pid) { $stmt->execute([$year, $pid]); }
+            }
+            $pdo->commit();
+        } catch (Throwable $e) {
+            $pdo->rollBack();
+            http_response_code(500);
+            echo json_encode(['error' => $e->getMessage()]);
+            exit;
+        }
+        echo json_encode(['ok' => true, 'year' => $year, 'count' => count($player_ids)]);
+        exit;
+    }
+
+    // ── Add year (tournament + rounds) ───────────────────────────────────
     if ($action === 'add_year') {
         $year   = (int)($data['year']   ?? 0);
         $rounds = $data['rounds']       ?? [];
@@ -137,7 +172,7 @@ if ($method === 'POST') {
         exit;
     }
 
-    // ── Add player ──────────────────────────────────────────────────────────
+    // ── Add player ─────────────────────────────────────────────────
     if ($action === 'add_player') {
         $name = trim($data['name'] ?? '');
         $team = $data['team'] ?? '';
@@ -157,7 +192,7 @@ if ($method === 'POST') {
         exit;
     }
 
-    // ── Update player (rename / change team) ───────────────────────────────────
+    // ── Update player (rename / change team) ──────────────────────────
     if ($action === 'update_player') {
         $id   = (int)($data['id']   ?? 0);
         $name = trim($data['name']  ?? '');
@@ -173,7 +208,7 @@ if ($method === 'POST') {
         exit;
     }
 
-    // ── Merge players ──────────────────────────────────────────────────────
+    // ── Merge players ────────────────────────────────────────────────
     if ($action === 'merge_players') {
         $keep_id  = (int)($data['keep_id']  ?? 0);
         $merge_id = (int)($data['merge_id'] ?? 0);
@@ -206,7 +241,7 @@ if ($method === 'POST') {
         exit;
     }
 
-    // ── Delete player ──────────────────────────────────────────────────────
+    // ── Delete player ───────────────────────────────────────────────
     if ($action === 'delete_player') {
         $id = (int)($data['id'] ?? 0);
         if (!$id) { http_response_code(400); echo json_encode(['error' => 'id required']); exit; }
@@ -223,7 +258,7 @@ if ($method === 'POST') {
         exit;
     }
 
-    // ── Delete match ───────────────────────────────────────────────────────
+    // ── Delete match ─────────────────────────────────────────────────
     if ($action === 'delete_match') {
         $match_id = (int)($data['match_id'] ?? 0);
         if (!$match_id) {
@@ -237,7 +272,7 @@ if ($method === 'POST') {
         exit;
     }
 
-    // ── Save match ──────────────────────────────────────────────────────────
+    // ── Save match ───────────────────────────────────────────────────
     // Creates the match row if needed. Both the players list and the winner are
     // optional — an empty placeholder ("draft") is allowed so captains can
     // pre-create matches before they've decided who plays.

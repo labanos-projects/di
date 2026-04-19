@@ -4,7 +4,11 @@
 // Given a locked team + 1-2 players + format, enumerate every valid opposing
 // lineup and rank by win probability against the locked pair.
 //
-// GET /php/pair_suggest.php?format=fourball&locked_team=red&locked_ids=3,7&limit=10&rank=best
+// GET /php/pair_suggest.php?format=fourball&locked_team=red&locked_ids=3,7&limit=10&rank=best&year=2026
+//
+// Optional `year` restricts candidate opponents to that year's roster (falls
+// back to "all active players" on the opposing team if no explicit roster
+// has been saved for the year — same rule as /roster.php).
 //
 // rank=best  (default): return the opposing lineups with the HIGHEST win
 //                       probability against the locked pair (hardest matchups).
@@ -31,13 +35,14 @@ require_once __DIR__ . '/db_connect.php';
 require_once __DIR__ . '/db_migrate.php';
 run_migrations($pdo);
 
-// ── Parse input ───────────────────────────────────────────────────────────
+// ── Parse input ──────────────────────────────────────────────────────────
 $format      = $_GET['format']      ?? '';
 $locked_team = $_GET['locked_team'] ?? '';
 $locked_ids  = array_filter(array_map('intval', explode(',', $_GET['locked_ids'] ?? '')));
 $limit       = max(1, min(50, intval($_GET['limit'] ?? 10)));
 $rank        = strtolower($_GET['rank'] ?? 'best');
 if (!in_array($rank, ['best','worst'], true)) $rank = 'best';
+$year        = intval($_GET['year'] ?? 0);    // 0 = no year filter
 
 $valid_formats = ['fourball','greensome','foursome','singles'];
 if (!in_array($format, $valid_formats, true)) {
@@ -59,7 +64,7 @@ if (count($locked_ids) !== $expected) {
 }
 $opposing_team = ($locked_team === 'blue') ? 'red' : 'blue';
 
-// ── Validate locked players (must be on locked team) ─────────────────────────
+// ── Validate locked players (must be on locked team) ──────────────────────────
 $place_locked = implode(',', array_fill(0, count($locked_ids), '?'));
 $stmt = $pdo->prepare("SELECT id, name, team FROM players WHERE id IN ($place_locked)");
 $stmt->execute($locked_ids);
@@ -78,9 +83,29 @@ if (count($locked_players) !== count($locked_ids)) {
     exit;
 }
 
-// ── Opposing roster ───────────────────────────────────────────────────────
-$stmt = $pdo->prepare("SELECT id, name FROM players WHERE team = ? ORDER BY name");
-$stmt->execute([$opposing_team]);
+// ── Opposing roster ─────────────────────────────────────────────────────
+// If a year was passed AND that year has an explicit roster row, restrict
+// opposing candidates to that roster. Otherwise fall back to every player on
+// the opposing team (the pre-roster behavior).
+$roster_explicit = false;
+if ($year) {
+    $c = $pdo->prepare("SELECT COUNT(*) FROM roster_assignments WHERE year = ?");
+    $c->execute([$year]);
+    $roster_explicit = ((int)$c->fetchColumn()) > 0;
+}
+if ($roster_explicit) {
+    $stmt = $pdo->prepare("
+        SELECT p.id, p.name
+          FROM players p
+          JOIN roster_assignments ra ON ra.player_id = p.id
+         WHERE p.team = ? AND ra.year = ?
+         ORDER BY p.name
+    ");
+    $stmt->execute([$opposing_team, $year]);
+} else {
+    $stmt = $pdo->prepare("SELECT id, name FROM players WHERE team = ? ORDER BY name");
+    $stmt->execute([$opposing_team]);
+}
 $opposing_players = [];
 foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $p) {
     $opposing_players[(int)$p['id']] = ['id' => (int)$p['id'], 'name' => $p['name']];
@@ -92,7 +117,7 @@ if (count($opposing_ids) < $expected) {
     exit;
 }
 
-// ── Helpers ─────────────────────────────────────────────────────────────────
+// ── Helpers ────────────────────────────────────────────────────────────────
 function smooth_rate($w, $h, $l, $k = 4) {
     $n = $w + $h + $l;
     return ($w + 0.5 * $h + $k * 0.5) / ($n + $k);
@@ -103,7 +128,7 @@ function enrich_record($rec) {
     return $rec;
 }
 
-// ── Per-player format record (locked + opposing) ─────────────────────────────
+// ── Per-player format record (locked + opposing) ────────────────────────────
 $all_ids = array_merge($locked_ids, $opposing_ids);
 $place_all = implode(',', array_fill(0, count($all_ids), '?'));
 $stmt = $pdo->prepare("
@@ -198,7 +223,7 @@ if ($format !== 'singles') {
     }
 }
 
-// ── H2H: opposing player vs locked player, this format ────────────────────────
+// ── H2H: opposing player vs locked player, this format ─────────────────────
 $place_opp = implode(',', array_fill(0, count($opposing_ids), '?'));
 $stmt = $pdo->prepare("
     SELECT mr.player_id  AS opp_id,
@@ -229,7 +254,7 @@ foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
     ];
 }
 
-// ── Enumerate candidate lineups ────────────────────────────────────────────
+// ── Enumerate candidate lineups ───────────────────────────────────────────
 $candidates = [];
 if ($format === 'singles') {
     foreach ($opposing_ids as $id) { $candidates[] = [$id]; }
@@ -242,7 +267,7 @@ if ($format === 'singles') {
     }
 }
 
-// ── Score each candidate ──────────────────────────────────────────────────
+// ── Score each candidate ────────────────────────────────────────────────
 $suggestions = [];
 foreach ($candidates as $cand_ids) {
     // Pair strength
