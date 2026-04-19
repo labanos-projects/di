@@ -97,12 +97,12 @@ if ($method === 'GET') {
     exit;
 }
 
-// ── POST ─────────────────────────────────────────────────────────────────────
+// ── POST ──────────────────────────────────────────────────────────────────────
 if ($method === 'POST') {
     $data   = json_decode(file_get_contents('php://input'), true);
     $action = $data['action'] ?? '';
 
-    // ── Add year (tournament + rounds) ────────────────────────────────────────
+    // ── Add year (tournament + rounds) ─────────────────────────────────────
     if ($action === 'add_year') {
         $year   = (int)($data['year']   ?? 0);
         $rounds = $data['rounds']       ?? [];
@@ -137,7 +137,7 @@ if ($method === 'POST') {
         exit;
     }
 
-    // ── Add player ────────────────────────────────────────────────────────────
+    // ── Add player ──────────────────────────────────────────────────────────
     if ($action === 'add_player') {
         $name = trim($data['name'] ?? '');
         $team = $data['team'] ?? '';
@@ -157,7 +157,7 @@ if ($method === 'POST') {
         exit;
     }
 
-    // ── Update player (rename / change team) ─────────────────────────────────
+    // ── Update player (rename / change team) ───────────────────────────────────
     if ($action === 'update_player') {
         $id   = (int)($data['id']   ?? 0);
         $name = trim($data['name']  ?? '');
@@ -173,7 +173,7 @@ if ($method === 'POST') {
         exit;
     }
 
-    // ── Merge players ─────────────────────────────────────────────────────────
+    // ── Merge players ──────────────────────────────────────────────────────
     if ($action === 'merge_players') {
         $keep_id  = (int)($data['keep_id']  ?? 0);
         $merge_id = (int)($data['merge_id'] ?? 0);
@@ -206,7 +206,7 @@ if ($method === 'POST') {
         exit;
     }
 
-    // ── Delete player ─────────────────────────────────────────────────────────
+    // ── Delete player ──────────────────────────────────────────────────────
     if ($action === 'delete_player') {
         $id = (int)($data['id'] ?? 0);
         if (!$id) { http_response_code(400); echo json_encode(['error' => 'id required']); exit; }
@@ -223,7 +223,7 @@ if ($method === 'POST') {
         exit;
     }
 
-    // ── Delete match ──────────────────────────────────────────────────────────
+    // ── Delete match ───────────────────────────────────────────────────────
     if ($action === 'delete_match') {
         $match_id = (int)($data['match_id'] ?? 0);
         if (!$match_id) {
@@ -237,18 +237,39 @@ if ($method === 'POST') {
         exit;
     }
 
-    // ── Save match (creates match row if needed; winner is optional for upcoming) ──
+    // ── Save match ──────────────────────────────────────────────────────────
+    // Creates the match row if needed. Both the players list and the winner are
+    // optional — an empty placeholder ("draft") is allowed so captains can
+    // pre-create matches before they've decided who plays.
     $year         = (int)($data['year']         ?? 0);
     $round_number = (int)($data['round_number'] ?? 0);
     $match_number = (int)($data['match_number'] ?? 0);
     $winner       = $data['winner']  ?? '';   // '' = upcoming (no result yet)
     $ups_value    = (int)($data['ups'] ?? 0);
     $players      = $data['players'] ?? [];
+    if (!is_array($players)) $players = [];
 
-    if (!$year || !$round_number || !$match_number || !$players) {
+    if (!$year || !$round_number || !$match_number) {
         http_response_code(400);
-        echo json_encode(['error' => 'year, round_number, match_number, players required']);
+        echo json_encode(['error' => 'year, round_number, match_number required']);
         exit;
+    }
+
+    // Drop any slots with an empty name — those are unfilled draft slots.
+    $players = array_values(array_filter($players, function ($p) {
+        return isset($p['name']) && trim($p['name']) !== '';
+    }));
+
+    // If a final result was provided, we need at least one player per team so
+    // the points have someone to attach to. (Upcoming / draft saves don't care.)
+    if ($winner !== '') {
+        $teams_present = [];
+        foreach ($players as $p) { $teams_present[$p['team']] = true; }
+        if (empty($teams_present['blue']) || empty($teams_present['red'])) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Result set but a team has no players — clear the result or pick players']);
+            exit;
+        }
     }
 
     // Look up or create the match row
@@ -316,14 +337,18 @@ if ($method === 'POST') {
         $resolved[] = [$match_id, $player_id, $points, $ups, $partner_id];
     }
 
+    // Replace whatever results existed. If $resolved is empty we just leave
+    // the match row in place with no results — a true placeholder / draft.
     $pdo->prepare("DELETE FROM match_results WHERE match_id = ?")->execute([$match_id]);
 
-    $stmt = $pdo->prepare("
-        INSERT INTO match_results (match_id, player_id, points, ups, partner_id)
-        VALUES (?, ?, ?, ?, ?)
-    ");
-    foreach ($resolved as $r) {
-        $stmt->execute($r);
+    if (!empty($resolved)) {
+        $stmt = $pdo->prepare("
+            INSERT INTO match_results (match_id, player_id, points, ups, partner_id)
+            VALUES (?, ?, ?, ?, ?)
+        ");
+        foreach ($resolved as $r) {
+            $stmt->execute($r);
+        }
     }
 
     echo json_encode(['ok' => true, 'match_id' => $match_id]);

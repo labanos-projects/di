@@ -51,7 +51,7 @@
       </div>
     </header>
 
-    <!-- ── MATCHES TAB ───────────────────────────────────────────────────────── -->
+    <!-- ── MATCHES TAB ─────────────────────────────────── -->
     <div id="tab-matches-content" class="max-w-4xl mx-auto px-4 py-6 space-y-4">
 
       <!-- Setup New Year (collapsible) -->
@@ -157,7 +157,7 @@
       </button>
     </div>
 
-    <!-- ── PLAYERS TAB ───────────────────────────────────────────────────────── -->
+    <!-- ── PLAYERS TAB ─────────────────────────────────── -->
     <div id="tab-players-content" class="hidden max-w-4xl mx-auto px-4 py-6">
 
       <div class="bg-white rounded-2xl shadow p-4 mb-6">
@@ -202,7 +202,7 @@
       </div>
     </div>
 
-    <!-- ── PAIRINGS TAB ────────────────────────────────────────────────────── -->
+    <!-- ── PAIRINGS TAB ────────────────────────────────── -->
     <div id="tab-pairings-content" class="hidden max-w-5xl mx-auto px-4 py-6 space-y-4">
 
       <div class="bg-white rounded-2xl shadow p-5">
@@ -296,7 +296,7 @@
     let currentYear    = null;
     let currentRound   = 1;
 
-    // ── Auth ──────────────────────────────────────────────────────────────────────────────────────
+    // ── Auth ─────────────────────────────────────────────────
     function checkPassword() {
       if (document.getElementById('pw-input').value === ADMIN_PASSWORD) {
         document.getElementById('auth-gate').classList.add('hidden');
@@ -310,7 +310,7 @@
       if (e.key === 'Enter') checkPassword();
     });
 
-    // ── Tabs ──────────────────────────────────────────────────────────────────────────────────────
+    // ── Tabs ─────────────────────────────────────────────────
     function showTab(name) {
       ['matches','players','pairings'].forEach(t => {
         document.getElementById(`tab-${t}-content`).classList.toggle('hidden', t !== name);
@@ -323,12 +323,12 @@
       if (name === 'pairings') initPairings();
     }
 
-    // ── Init ──────────────────────────────────────────────────────────────────────────────────────
+    // ── Init ─────────────────────────────────────────────────
     async function init() {
       await Promise.all([refreshYears(), refreshPlayerLists()]);
     }
 
-    // ── Year dropdown (dynamic) ────────────────────────────────────────────────────────────────
+    // ── Year dropdown (dynamic) ────────────────────────────────────────
     async function refreshYears() {
       const res   = await fetch(`${API}/admin.php?action=years`);
       const years = await res.json();
@@ -339,7 +339,7 @@
       if (years.length) currentYear = years[0];
     }
 
-    // ── New Year panel ───────────────────────────────────────────────────────────────────────
+    // ── New Year panel ───────────────────────────────────────────────
     function toggleNewYear() {
       const panel = document.getElementById('new-year-panel');
       const arrow = document.getElementById('new-year-arrow');
@@ -391,7 +391,7 @@
       redPlayers  = allPlayers.filter(p => p.team === 'red').sort((a,b) => a.name.localeCompare(b.name));
     }
 
-    // ── Matches tab ───────────────────────────────────────────────────────────────────────────────
+    // ── Matches tab ─────────────────────────────────────────────────
     async function loadMatches() {
       currentYear  = parseInt(document.getElementById('year-select').value);
       currentRound = parseInt(document.getElementById('round-select').value);
@@ -441,8 +441,9 @@
 
     function badgeHtml(hasPlayers, upcoming, hasFinalResult) {
       if (hasFinalResult) return '<span class="match-badge text-xs px-2 py-1 rounded-full font-medium bg-green-100 text-green-700">✓ Saved</span>';
-      if (upcoming)       return '<span class="match-badge text-xs px-2 py-1 rounded-full font-medium bg-amber-100 text-amber-700">⏳ Upcoming</span>';
-      return '<span class="match-badge text-xs px-2 py-1 rounded-full font-medium bg-gray-100 text-gray-500">Empty</span>';
+      if (upcoming && hasPlayers) return '<span class="match-badge text-xs px-2 py-1 rounded-full font-medium bg-amber-100 text-amber-700">⏳ Upcoming</span>';
+      if (upcoming)       return '<span class="match-badge text-xs px-2 py-1 rounded-full font-medium bg-slate-100 text-slate-600">📝 Draft</span>';
+      return '<span class="match-badge text-xs px-2 py-1 rounded-full font-medium bg-slate-100 text-slate-600">📝 Draft</span>';
     }
 
     function renderMatches() {
@@ -570,19 +571,28 @@
       const ups       = parseInt(card.querySelector('.ups-input').value) || 0;
       const status    = card.querySelector('.save-status');
 
-      // Players are always required; result is optional
-      if (!b1 || !r1) { status.textContent='⚠ Select players for both teams'; status.className='save-status text-sm text-yellow-600'; return; }
-      if (!isSingles && (!b2||!r2)) { status.textContent='⚠ Select both players per team'; status.className='save-status text-sm text-yellow-600'; return; }
-      if (b1===b2||r1===r2) { status.textContent='⚠ Same player selected twice'; status.className='save-status text-sm text-yellow-600'; return; }
+      // Both players and result are optional. If a result is set, each team needs at least one player.
+      if (b1 && b2 && b1 === b2) { status.textContent='⚠ Same Blue player selected twice'; status.className='save-status text-sm text-yellow-600'; return; }
+      if (r1 && r2 && r1 === r2) { status.textContent='⚠ Same Red player selected twice'; status.className='save-status text-sm text-yellow-600'; return; }
+      if (winner) {
+        const blueCount = (b1?1:0) + (b2?1:0);
+        const redCount  = (r1?1:0) + (r2?1:0);
+        if (blueCount === 0 || redCount === 0) {
+          status.textContent='⚠ Result set but a team has no players — clear the result or pick players';
+          status.className='save-status text-sm text-yellow-600';
+          return;
+        }
+      }
 
-      let players;
+      let players = [];
       if (isSingles) {
-        players = [{name:b1,team:'blue'},{name:r1,team:'red'}];
+        if (b1) players.push({ name:b1, team:'blue' });
+        if (r1) players.push({ name:r1, team:'red'  });
       } else {
-        players = [
-          {name:b1,team:'blue',partner_name:b2},{name:b2,team:'blue',partner_name:b1},
-          {name:r1,team:'red', partner_name:r2},{name:r2,team:'red', partner_name:r1},
-        ];
+        if (b1) players.push({ name:b1, team:'blue', partner_name: b2 || '' });
+        if (b2) players.push({ name:b2, team:'blue', partner_name: b1 || '' });
+        if (r1) players.push({ name:r1, team:'red',  partner_name: r2 || '' });
+        if (r2) players.push({ name:r2, team:'red',  partner_name: r1 || '' });
       }
 
       btn.disabled = true;
@@ -595,12 +605,17 @@
         const data = await res.json();
         if (data.ok) {
           if (data.match_id) card.dataset.matchId = String(data.match_id);
-          const isUpcoming = !winner;
-          status.textContent = isUpcoming ? '✓ Saved as upcoming!' : '✓ Saved!';
+          const isUpcoming   = !winner;
+          const hasAnyPlayer = !!(b1 || b2 || r1 || r2);
+          const isDraft      = isUpcoming && !hasAnyPlayer;
+          status.textContent = isDraft ? '✓ Saved as draft!' : (isUpcoming ? '✓ Saved as upcoming!' : '✓ Saved!');
           status.className = 'save-status text-sm text-green-600';
           // Update badge
           const badge = card.querySelector('.match-badge');
-          if (isUpcoming) {
+          if (isDraft) {
+            badge.textContent = '📝 Draft';
+            badge.className = 'match-badge text-xs px-2 py-1 rounded-full font-medium bg-slate-100 text-slate-600';
+          } else if (isUpcoming) {
             badge.textContent = '⏳ Upcoming';
             badge.className = 'match-badge text-xs px-2 py-1 rounded-full font-medium bg-amber-100 text-amber-700';
           } else {
@@ -614,7 +629,7 @@
       btn.disabled = false;
     }
 
-    // ── Players tab ───────────────────────────────────────────────────────────────────────────────
+    // ── Players tab ─────────────────────────────────────────────────
     async function loadPlayers() {
       document.getElementById('players-loading').classList.remove('hidden');
       await refreshPlayerLists();
@@ -759,7 +774,7 @@
       } catch(e) { status.textContent = '✗ Network error'; status.className = 'text-sm text-red-600'; }
     }
 
-    // ── Pairings tab ────────────────────────────────────────────────────────────────────────────
+    // ── Pairings tab ────────────────────────────────────────────────
     const PA_FORMATS = [
       { value: 'fourball',  label: 'Fourball'  },
       { value: 'greensome', label: 'Greensome' },
