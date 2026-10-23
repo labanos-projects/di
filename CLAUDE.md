@@ -15,8 +15,9 @@ that talk to a shared MySQL database.
 - `index.html`, `admin.html` — entry points
 - `app.js`, `components.js`, `constants.js` — shared UI/state
 - `leaderboard.js`, `player.js`, `history.js`, `thisyear.js` — page modules
+- `auth.js` — player login, invite activation (`#invite/<token>`), My account (`#account`)
 - `php/db_connect.php` — shared PDO connection (template, credentials substituted on server)
-- `php/*.php` — REST-ish endpoints (`leaderboard`, `matches`, `players`, `roster`, `results`, `year_schedule`, `player_stats`, `pair_suggest`, `pairing_analysis`, `admin`)
+- `php/*.php` — REST-ish endpoints (`auth`, `leaderboard`, `matches`, `players`, `roster`, `results`, `year_schedule`, `player_stats`, `pair_suggest`, `pairing_analysis`, `admin`)
 - `migrate/` — one-off Python + SQL scripts that imported historical Excel data. Not part of the runtime; safe to ignore unless re-importing.
 - `TODO.md` — current backlog. Read before suggesting new work.
 
@@ -27,13 +28,15 @@ that talk to a shared MySQL database.
 - `matches` — one or more per round
 - `match_results` — per-player result rows (`points`, `ups`, optional `partner_id`); `NULL` points/ups means "scheduled, not yet played"
 - `roster_assignments` — per-year roster; if a year has no rows it falls back to "all active players"
+- `di_accounts` — one login per player (email, password_hash, invite_token, is_admin). Auto-created for every player by `ensure_player_accounts()`. Deliberately NOT the shared `users` table, so golf players get no access to investtracker/fitness_buddy.
+- `di_sessions` — player login sessions (SHA-256 of the bearer token, 180-day expiry)
 
 Schema lives in `php/db_migrate.php` (idempotent — re-runs are safe).
 
 ## Conventions
 - PHP endpoints use **PDO** with `utf8mb4`, exception mode, fetch-assoc.
 - All responses are **JSON**; CORS is wide open (`Access-Control-Allow-Origin: *`).
-- Auth: bearer token in `Authorization` header against `users.api_token` (table lives in the shared DB; same as investtracker/fitness_buddy). Use `require_auth($pdo)` pattern for write routes.
+- Auth: player/admin logins go through `php/auth.php` — bearer token in `Authorization` checked against `di_sessions`; admin routes require `di_accounts.is_admin = 1` (`require_account` / `require_admin` in auth.php). The shared `users.api_token` is investtracker/fitness_buddy's, not DI's. Note: most of `admin.php` is still unauthenticated (client-side password only) — see TODO.
 - Frontend is vanilla JS — no framework, no bundler. Keep it that way unless we explicitly agree to introduce one.
 - Don't touch `migrate/` files casually; they were one-off importers.
 
