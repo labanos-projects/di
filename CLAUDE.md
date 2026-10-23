@@ -9,7 +9,7 @@ that talk to a shared MySQL database.
 - **Backend:** PHP under `php/`. Each endpoint is a self-contained `*.php` file that `require_once`s `db_connect.php`, returns JSON, and sets permissive CORS.
 - **Database:** MySQL on `labanos.dk`. Shared instance with `fitness_buddy` and `investtracker` (one schema, all tables together). See "Database" below.
 - **Default branch:** `main`.
-- **Deploy:** static files served from GitHub Pages; PHP is deployed to one.com (`labanos.dk/di`) over SFTP by `.github/workflows/deploy-php.yml` on every push to `main` that touches `php/`. That workflow uploads an explicit file list — **add every new `php/*.php` endpoint to both its `FILES` line and its `put` list**, or it won't reach the server.
+- **Deploy:** static files served from GitHub Pages. PHP is served from one.com's web root `/customers/2/3/7/cib30a83y/webroots/www/di` (= `labanos.dk/di`). `.github/workflows/deploy-php.yml` uploads there over SFTP on pushes to `main` that touch `php/`, but **only the files in its `DEPLOY_FILES` list** (currently `auth.php db_migrate.php .htaccess`); the other endpoints are still hand-uploaded live copies. Before 2026-10-23 the workflow uploaded to the SFTP user's home (`users/cib30a83y_ssh/di`), which is not served, so earlier "successful" deploys never went live. Each deploy backs up the live versions to `~/di-backups/<timestamp>/` first.
 
 ## File layout
 - `index.html`, `admin.html` — entry points
