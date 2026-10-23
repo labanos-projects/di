@@ -27,12 +27,14 @@ jobs:
 
       - name: Deploy via SFTP
         run: |
-          sshpass -p "${{ secrets.SFTP_PASS }}" sftp \
+          # -b - : batch mode, so any failed command (e.g. a put) aborts with a non-zero exit
+          # and fails this step instead of being silently ignored. "-mkdir" may fail if it exists.
+          sshpass -p "${{ secrets.SFTP_PASS }}" sftp -o BatchMode=no -b - \
             -o StrictHostKeyChecking=no \
             -o UserKnownHostsFile=/dev/null \
             -P ${{ secrets.SFTP_PORT }} \
             "${{ secrets.SFTP_USER }}@${{ secrets.SFTP_HOST }}" <<'SFTP'
-          mkdir di
+          -mkdir di
           cd di
           put php/db_connect.php db_connect.php
           put php/db_migrate.php db_migrate.php
@@ -49,6 +51,29 @@ jobs:
           put php/auth.php auth.php
           put php/.htaccess .htaccess
           SFTP
+
+      - name: Verify upload (reported as annotations)
+        if: always()
+        run: |
+          # Annotations are visible on the run page without signing in to GitHub.
+          sshpass -p "${{ secrets.SFTP_PASS }}" sftp -o BatchMode=no -b - \
+            -o StrictHostKeyChecking=no \
+            -o UserKnownHostsFile=/dev/null \
+            -P ${{ secrets.SFTP_PORT }} \
+            "${{ secrets.SFTP_USER }}@${{ secrets.SFTP_HOST }}" > listing.txt 2>&1 <<'SFTP' || true
+          pwd
+          ls -la di
+          SFTP
+          LIST=$(grep -v '^sftp>' listing.txt | sed 's/  */ /g' | tr '\n' ';' | sed 's/%/%25/g')
+          echo "::notice title=Remote di/ listing::${LIST}"
+          sleep 5
+          STATUS=$(curl -s -o /dev/null -w '%{http_code}' "https://labanos.dk/di/auth.php?action=me&cb=$(date +%s)")
+          echo "::notice title=auth.php HTTP status::${STATUS}"
+          # Without a session auth.php answers 401; 404 means the file is not being served.
+          if [ "$STATUS" = "404" ]; then
+            echo "::error title=auth.php missing::labanos.dk/di/auth.php returned 404 after deploy"
+            exit 1
+          fi
 
       - name: Done
         run: echo "PHP files deployed to labanos.dk/di"
