@@ -49,6 +49,7 @@ jobs:
           put php/pair_suggest.php pair_suggest.php
           put php/roster.php roster.php
           put php/auth.php auth.php
+          put php/auth.php account.php
           put php/.htaccess .htaccess
           SFTP
 
@@ -56,22 +57,19 @@ jobs:
         if: always()
         run: |
           # Annotations are visible on the run page without signing in to GitHub.
-          sshpass -p "${{ secrets.SFTP_PASS }}" sftp -o BatchMode=no -b - \
-            -o StrictHostKeyChecking=no \
-            -o UserKnownHostsFile=/dev/null \
-            -P ${{ secrets.SFTP_PORT }} \
-            "${{ secrets.SFTP_USER }}@${{ secrets.SFTP_HOST }}" > listing.txt 2>&1 <<'SFTP' || true
-          pwd
-          ls -la di
-          SFTP
-          LIST=$(grep -v '^sftp>' listing.txt | sed 's/  */ /g' | tr '\n' ';' | sed 's/%/%25/g')
-          echo "::notice title=Remote di/ listing::${LIST}"
+          sshpass -p "${{ secrets.SFTP_PASS }}" ssh -o BatchMode=no \
+            -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+            -p ${{ secrets.SFTP_PORT }} "${{ secrets.SFTP_USER }}@${{ secrets.SFTP_HOST }}" \
+            'ls -la di 2>&1 | grep -Ei "auth|account|roster|htaccess|total"' > listing.txt 2>&1 || echo "ssh failed: $?" >> listing.txt
+          while IFS= read -r line; do echo "::notice title=di/ listing::${line}"; done < listing.txt
           sleep 5
-          STATUS=$(curl -s -o /dev/null -w '%{http_code}' "https://labanos.dk/di/auth.php?action=me&cb=$(date +%s)")
-          echo "::notice title=auth.php HTTP status::${STATUS}"
-          # Without a session auth.php answers 401; 404 means the file is not being served.
-          if [ "$STATUS" = "404" ]; then
-            echo "::error title=auth.php missing::labanos.dk/di/auth.php returned 404 after deploy"
+          for f in auth.php account.php roster.php; do
+            S=$(curl -s -o /dev/null -w '%{http_code}' "https://labanos.dk/di/${f}?action=me&cb=$(date +%s)")
+            echo "::notice title=HTTP ${f}::${S}"
+            eval "ST_${f%.php}=$S"
+          done
+          if [ "$ST_auth" = "404" ]; then
+            echo "::error title=auth.php not served::labanos.dk/di/auth.php returned 404 after deploy"
             exit 1
           fi
 
