@@ -60,8 +60,8 @@ jobs:
           sshpass -p "${{ secrets.SFTP_PASS }}" ssh -o BatchMode=no \
             -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
             -p ${{ secrets.SFTP_PORT }} "${{ secrets.SFTP_USER }}@${{ secrets.SFTP_HOST }}" \
-            'ls -la di 2>&1 | grep -Ei "auth|account|roster|htaccess|total"' > listing.txt 2>&1 || echo "ssh failed: $?" >> listing.txt
-          while IFS= read -r line; do echo "::notice title=di/ listing::${line}"; done < listing.txt
+            'echo "home=$(pwd)"; find . -maxdepth 6 \( -name sql.php -o -name roster.php -o -name auth.php \) -printf "%p  %TY-%Tm-%Td %TH:%TM\n" 2>/dev/null | sort | head -8' > listing.txt 2>&1 || echo "ssh failed: $?" >> listing.txt
+          while IFS= read -r line; do echo "::notice title=server::${line}"; done < listing.txt
           sleep 5
           for f in auth.php account.php roster.php; do
             S=$(curl -s -o /dev/null -w '%{http_code}' "https://labanos.dk/di/${f}?action=me&cb=$(date +%s)")
