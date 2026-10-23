@@ -7,6 +7,16 @@ on:
       - 'php/**'
       - '.github/workflows/deploy-php.yml'
 
+env:
+  # labanos.dk is served from webroots/www on one.com. The SFTP user's home
+  # (users/cib30a83y_ssh) is NOT served — uploads there never go live.
+  LIVE_DIR: /customers/2/3/7/cib30a83y/webroots/www/di
+  # Files deployed to LIVE_DIR. Deliberately only the player-accounts files for now:
+  # the other endpoints (incl. db_connect.php, which gets DB credentials from secrets)
+  # are still the hand-uploaded live copies, and the secrets have never been verified
+  # against the live site. Add files here once that is checked.
+  DEPLOY_FILES: auth.php db_migrate.php .htaccess
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -16,64 +26,39 @@ jobs:
 
       - name: Inject DB credentials
         run: |
-          FILES="php/db_connect.php php/db_migrate.php php/players.php php/leaderboard.php php/results.php php/player_stats.php php/matches.php php/admin.php php/year_schedule.php php/pairing_analysis.php php/pair_suggest.php php/roster.php php/auth.php"
-          sed -i "s|%%DB_HOST%%|${{ secrets.DB_HOST }}|g" $FILES
-          sed -i "s|%%DB_NAME%%|${{ secrets.DB_NAME }}|g" $FILES
-          sed -i "s|%%DB_USER%%|${{ secrets.DB_USER }}|g" $FILES
-          sed -i "s|%%DB_PASS%%|${{ secrets.DB_PASS }}|g" $FILES
+          for f in $DEPLOY_FILES; do
+            [ "${f##*.}" = "php" ] || continue
+            sed -i "s|%%DB_HOST%%|${{ secrets.DB_HOST }}|g; s|%%DB_NAME%%|${{ secrets.DB_NAME }}|g; s|%%DB_USER%%|${{ secrets.DB_USER }}|g; s|%%DB_PASS%%|${{ secrets.DB_PASS }}|g" "php/$f"
+          done
 
       - name: Install sshpass
         run: sudo apt-get install -y sshpass
 
-      - name: Deploy via SFTP
+      - name: Back up live files
         run: |
-          # -b - : batch mode, so any failed command (e.g. a put) aborts with a non-zero exit
-          # and fails this step instead of being silently ignored. "-mkdir" may fail if it exists.
-          sshpass -p "${{ secrets.SFTP_PASS }}" sftp -o BatchMode=no -b - \
-            -o StrictHostKeyChecking=no \
-            -o UserKnownHostsFile=/dev/null \
-            -P ${{ secrets.SFTP_PORT }} \
-            "${{ secrets.SFTP_USER }}@${{ secrets.SFTP_HOST }}" <<'SFTP'
-          -mkdir di
-          cd di
-          put php/db_connect.php db_connect.php
-          put php/db_migrate.php db_migrate.php
-          put php/players.php players.php
-          put php/leaderboard.php leaderboard.php
-          put php/results.php results.php
-          put php/player_stats.php player_stats.php
-          put php/matches.php matches.php
-          put php/admin.php admin.php
-          put php/year_schedule.php year_schedule.php
-          put php/pairing_analysis.php pairing_analysis.php
-          put php/pair_suggest.php pair_suggest.php
-          put php/roster.php roster.php
-          put php/auth.php auth.php
-          put php/auth.php account.php
-          put php/.htaccess .htaccess
-          SFTP
-
-      - name: Verify upload (reported as annotations)
-        if: always()
-        run: |
-          # Annotations are visible on the run page without signing in to GitHub.
+          # Copy the current live versions to the SSH user's home (outside the web root).
+          STAMP=$(date -u +%Y%m%d-%H%M%S)
           sshpass -p "${{ secrets.SFTP_PASS }}" ssh -o BatchMode=no \
             -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
             -p ${{ secrets.SFTP_PORT }} "${{ secrets.SFTP_USER }}@${{ secrets.SFTP_HOST }}" \
-            'R=/customers/2/3/7/cib30a83y; ls -la $R 2>&1 | head -4; timeout 90 find $R -maxdepth 6 \( -name sql.php -o \( -type d -name di \) \) -not -path "*/users/*" 2>/dev/null | head -5' > listing.txt 2>&1 || echo "ssh failed: $?" >> listing.txt
-          while IFS= read -r line; do echo "::notice title=server::${line}"; done < listing.txt
-          sleep 5
-          SUMMARY=""
-          for f in auth.php account.php roster.php; do
-            S=$(curl -s --max-time 20 -o /dev/null -w '%{http_code}' "https://labanos.dk/di/${f}?action=me&cb=$(date +%s)" || echo "timeout")
-            SUMMARY="${SUMMARY} ${f}=${S}"
-            eval "ST_${f%.php}=$S"
-          done
-          echo "::notice title=HTTP status::${SUMMARY}"
-          if [ "$ST_auth" = "404" ]; then
-            echo "::error title=auth.php not served::labanos.dk/di/auth.php returned 404 after deploy"
-            exit 1
-          fi
+            "set -e; mkdir -p ~/di-backups/$STAMP; cd '$LIVE_DIR'; for f in $DEPLOY_FILES; do [ -e \"\$f\" ] && cp -p \"\$f\" ~/di-backups/$STAMP/ || true; done; ls -A ~/di-backups/$STAMP"
+          echo "::notice title=Backup::~/di-backups/$STAMP"
 
-      - name: Done
-        run: echo "PHP files deployed to labanos.dk/di"
+      - name: Deploy via SFTP
+        run: |
+          # Batch mode (-b -): any failed command aborts with a non-zero exit and fails the step.
+          # BatchMode=no keeps password auth working for sshpass.
+          {
+            echo "cd $LIVE_DIR"
+            for f in $DEPLOY_FILES; do echo "put php/$f $f"; done
+            echo "ls -l"
+          } > batch.txt
+          sshpass -p "${{ secrets.SFTP_PASS }}" sftp -o BatchMode=no -b batch.txt \
+            -o StrictHostKeyChecking=no \
+            -o UserKnownHostsFile=/dev/null \
+            -o LogLevel=ERROR \
+            -P ${{ secrets.SFTP_PORT }} \
+            "${{ secrets.SFTP_USER }}@${{ secrets.SFTP_HOST }}" | tee sftp.log
+          for f in $DEPLOY_FILES; do
+            grep -E " $f\$" sftp.log | sed 's/  */ /g' | while IFS= read -r l; do echo "::notice title=Live di/::$l"; done
+          done

@@ -25,11 +25,15 @@
 - [x] Invite link → player sets own email + password; login / logout / change password
 - [x] Admin page `accounts.html`: status per player, copy invite links, new/reset links
 - [ ] Link to `accounts.html` from `admin.html` (or fold it in when admin.php gets real auth)
-- [ ] Mark organiser account(s) as admin after deploy (`UPDATE di_accounts SET is_admin = 1 …`)
+- [x] Organiser account marked as admin (Peter Bugge)
 - [ ] Send invite links to the 2027 roster
 - [ ] Logged-in player profile page (sizes / details for polo order)
 - [ ] Polo ordering
 - [ ] Replace the client-side admin password with the new admin login for all admin.php writes
+
+## Deploy
+- [ ] Verify the DB_* GitHub secrets against the live `db_connect.php`, then add the remaining endpoints to `DEPLOY_FILES` in `deploy-php.yml` so the live folder matches the repo
+- [ ] Remove the dead copy in the SFTP user's home (`users/cib30a83y_ssh/di`, incl. a stray `account.php` from debugging)
 
 ## Phase 4 — Polish
 - [ ] Mobile responsive
