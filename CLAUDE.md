@@ -13,6 +13,7 @@ that talk to a shared MySQL database.
 
 ## File layout
 - `index.html`, `admin.html` — entry points
+- `accounts.html` — admin page for player accounts / invite links (server-checked admin login via `php/auth.php`)
 - `app.js`, `components.js`, `constants.js` — shared UI/state
 - `leaderboard.js`, `player.js`, `history.js`, `thisyear.js` — page modules
 - `auth.js` — player login, invite activation (`#invite/<token>`), My account (`#account`)

@@ -23,7 +23,8 @@
 ## Phase 3b — Player accounts (for 2027)
 - [x] One account per player (`di_accounts`), auto-created for every player incl. new ones
 - [x] Invite link → player sets own email + password; login / logout / change password
-- [x] Admin "Accounts" tab: status per player, copy invite links, new/reset links
+- [x] Admin page `accounts.html`: status per player, copy invite links, new/reset links
+- [ ] Link to `accounts.html` from `admin.html` (or fold it in when admin.php gets real auth)
 - [ ] Mark organiser account(s) as admin after deploy (`UPDATE di_accounts SET is_admin = 1 …`)
 - [ ] Send invite links to the 2027 roster
 - [ ] Logged-in player profile page (sizes / details for polo order)
