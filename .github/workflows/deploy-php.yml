@@ -60,14 +60,16 @@ jobs:
           sshpass -p "${{ secrets.SFTP_PASS }}" ssh -o BatchMode=no \
             -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
             -p ${{ secrets.SFTP_PORT }} "${{ secrets.SFTP_USER }}@${{ secrets.SFTP_HOST }}" \
-            'echo "home=$(pwd)"; find . -maxdepth 6 \( -name sql.php -o -name roster.php -o -name auth.php \) -printf "%p  %TY-%Tm-%Td %TH:%TM\n" 2>/dev/null | sort | head -8' > listing.txt 2>&1 || echo "ssh failed: $?" >> listing.txt
+            'R=/customers/2/3/7/cib30a83y; ls -la $R 2>&1 | head -4; timeout 90 find $R -maxdepth 6 \( -name sql.php -o \( -type d -name di \) \) -not -path "*/users/*" 2>/dev/null | head -5' > listing.txt 2>&1 || echo "ssh failed: $?" >> listing.txt
           while IFS= read -r line; do echo "::notice title=server::${line}"; done < listing.txt
           sleep 5
+          SUMMARY=""
           for f in auth.php account.php roster.php; do
-            S=$(curl -s -o /dev/null -w '%{http_code}' "https://labanos.dk/di/${f}?action=me&cb=$(date +%s)")
-            echo "::notice title=HTTP ${f}::${S}"
+            S=$(curl -s --max-time 20 -o /dev/null -w '%{http_code}' "https://labanos.dk/di/${f}?action=me&cb=$(date +%s)" || echo "timeout")
+            SUMMARY="${SUMMARY} ${f}=${S}"
             eval "ST_${f%.php}=$S"
           done
+          echo "::notice title=HTTP status::${SUMMARY}"
           if [ "$ST_auth" = "404" ]; then
             echo "::error title=auth.php not served::labanos.dk/di/auth.php returned 404 after deploy"
             exit 1
