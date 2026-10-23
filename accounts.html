@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DI Admin — Player accounts</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen">
+  <!-- Standalone admin page for player accounts / invite links.
+       Access is checked server-side by php/auth.php (account with is_admin = 1),
+       so unlike admin.html it has no client-side password gate. -->
+  <header class="bg-white shadow-sm sticky top-0 z-10">
+    <div class="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <span class="text-2xl">⛳</span>
+        <h1 class="text-xl font-bold">DI Admin</h1>
+      </div>
+      <a href="admin.html" class="text-sm text-gray-500 hover:text-gray-700">← Back to admin</a>
+    </div>
+  </header>
+
+    <!-- ── ACCOUNTS TAB ──────────────────────────────────────────────── -->
+    <div id="tab-accounts-content" class="max-w-4xl mx-auto px-4 py-6 space-y-4">
+
+      <!-- Admin login (server-checked; needs a player account with is_admin = 1) -->
+      <div id="acc-login" class="hidden bg-white rounded-2xl shadow p-5 max-w-sm">
+        <h2 class="font-bold text-lg mb-1">Admin login</h2>
+        <p class="text-sm text-gray-500 mb-4">Player accounts and invite links need your own DI login (an account marked as admin).</p>
+        <input id="acc-email" type="email" placeholder="Email" autocomplete="email"
+          class="w-full border rounded-lg px-3 py-2 mb-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+        <input id="acc-password" type="password" placeholder="Password" autocomplete="current-password"
+          class="w-full border rounded-lg px-3 py-2 mb-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+        <button onclick="accountsLogin()"
+          class="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-4 py-2 text-sm font-semibold transition">
+          Log in
+        </button>
+        <p id="acc-login-error" class="text-red-500 text-sm mt-2 hidden"></p>
+      </div>
+
+      <div id="acc-main" class="hidden space-y-4">
+        <div class="bg-white rounded-2xl shadow p-5">
+          <div class="flex flex-wrap items-center justify-between gap-3 mb-1">
+            <h2 class="font-bold text-lg">🔑 Player accounts</h2>
+            <div class="flex items-center gap-3 text-sm">
+              <span id="acc-whoami" class="text-gray-500"></span>
+              <button onclick="accountsLogout()" class="text-gray-500 hover:text-gray-700 underline">Log out</button>
+            </div>
+          </div>
+          <p class="text-sm text-gray-500 mb-4">
+            Every player has one account. Send each player their personal invite link — they open it and choose
+            their own email and password. If someone forgets their password, click <b>New link</b> and send that
+            instead (the old link stops working).
+          </p>
+          <div class="flex flex-wrap items-center gap-3 mb-3">
+            <label class="flex items-center gap-2 text-sm">
+              <input id="acc-roster-only" type="checkbox" checked onchange="renderAccounts()">
+              <span id="acc-roster-label">Only latest roster</span>
+            </label>
+            <button onclick="copyPendingLinks()"
+              class="bg-gray-100 hover:bg-gray-200 rounded-lg px-3 py-1.5 text-sm font-semibold transition">
+              Copy all pending invite links
+            </button>
+            <span id="acc-summary" class="text-sm text-gray-500"></span>
+            <span id="acc-status" class="text-sm"></span>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead>
+                <tr class="text-left text-gray-400 border-b">
+                  <th class="py-2 pr-3 font-medium">Player</th>
+                  <th class="py-2 pr-3 font-medium">Status</th>
+                  <th class="py-2 pr-3 font-medium">Email</th>
+                  <th class="py-2 pr-3 font-medium">Last login</th>
+                  <th class="py-2 font-medium text-right">Invite link</th>
+                </tr>
+              </thead>
+              <tbody id="acc-rows"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  <script>
+    const API = 'https://labanos.dk/di';
+
+    // ── Accounts ──────────────────────────────────────────────────────────────
+    // Uses php/auth.php. Session token is shared with the public site
+    // (localStorage 'di_session', same origin) and must belong to an admin.
+    const SESSION_KEY = 'di_session';
+    let accountsData = null;
+
+    function accSession() {
+      try { return JSON.parse(localStorage.getItem(SESSION_KEY)) || null; } catch (e) { return null; }
+    }
+    function accSetSession(s) {
+      try { s ? localStorage.setItem(SESSION_KEY, JSON.stringify(s)) : localStorage.removeItem(SESSION_KEY); } catch (e) {}
+    }
+    function escHtml(v) {
+      return String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+    function inviteUrl(token) {
+      // accounts.html and index.html are served from the same site
+      return new URL(`./#invite/${token}`, window.location.href).href;
+    }
+    function accShowLogin(msg) {
+      document.getElementById('acc-main').classList.add('hidden');
+      document.getElementById('acc-login').classList.remove('hidden');
+      const err = document.getElementById('acc-login-error');
+      err.textContent = msg || '';
+      err.classList.toggle('hidden', !msg);
+    }
+
+    async function openAccountsTab() {
+      const s = accSession();
+      if (!s || !s.token) { accShowLogin(); return; }
+      const res = await fetch(`${API}/auth.php?action=accounts`, { headers: { Authorization: `Bearer ${s.token}` } });
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 401) { accSetSession(null); accShowLogin(); return; }
+      if (res.status === 403) { accShowLogin(`${s.account?.player_name || 'This account'} is not an admin.`); return; }
+      if (!res.ok) { accShowLogin(data.error || 'Could not load accounts'); return; }
+      accountsData = data;
+      document.getElementById('acc-login').classList.add('hidden');
+      document.getElementById('acc-main').classList.remove('hidden');
+      document.getElementById('acc-whoami').textContent = `Logged in as ${s.account?.player_name || ''}`;
+      document.getElementById('acc-roster-label').textContent =
+        data.roster_year ? `Only ${data.roster_year} roster` : 'Only latest roster';
+      renderAccounts();
+    }
+
+    async function accountsLogin() {
+      const email = document.getElementById('acc-email').value;
+      const password = document.getElementById('acc-password').value;
+      const res = await fetch(`${API}/auth.php`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'login', email, password }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { accShowLogin(data.error || 'Login failed'); return; }
+      accSetSession({ token: data.token, account: data.account });
+      document.getElementById('acc-password').value = '';
+      openAccountsTab();
+    }
+    document.getElementById('acc-password').addEventListener('keydown', e => {
+      if (e.key === 'Enter') accountsLogin();
+    });
+
+    async function accountsLogout() {
+      const s = accSession();
+      if (s) {
+        try {
+          await fetch(`${API}/auth.php`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${s.token}` },
+            body: JSON.stringify({ action: 'logout' }),
+          });
+        } catch (e) {}
+      }
+      accSetSession(null);
+      accountsData = null;
+      accShowLogin();
+    }
+
+    function accVisible() {
+      if (!accountsData) return [];
+      const rosterOnly = document.getElementById('acc-roster-only').checked && accountsData.roster_year;
+      return accountsData.accounts.filter(a => !rosterOnly || a.on_latest_roster);
+    }
+
+    function renderAccounts() {
+      const rows = accVisible();
+      const active = rows.filter(a => a.activated_at).length;
+      document.getElementById('acc-summary').textContent = `${active} of ${rows.length} players have logged in`;
+      document.getElementById('acc-rows').innerHTML = rows.map(a => {
+        const teamDot = a.team === 'red' ? 'bg-red-600' : 'bg-blue-600';
+        const status = a.activated_at
+          ? '<span class="px-2 py-0.5 rounded text-xs font-semibold bg-green-100 text-green-700">Active</span>'
+          : '<span class="px-2 py-0.5 rounded text-xs font-semibold bg-amber-100 text-amber-700">Invited</span>';
+        const pendingReset = a.activated_at && a.invite_token
+          ? ' <span class="text-xs text-gray-400">(reset link out)</span>' : '';
+        const admin = a.is_admin ? ' <span class="text-xs text-gray-400">admin</span>' : '';
+        const linkBtn = a.invite_token
+          ? `<button onclick="copyInvite(${a.player_id})" class="text-blue-600 hover:underline mr-3">Copy link</button>` : '';
+        return `<tr class="border-b last:border-0">
+          <td class="py-2 pr-3 whitespace-nowrap"><span class="inline-block w-2 h-2 rounded-full ${teamDot} mr-2"></span>${escHtml(a.player_name)}${admin}</td>
+          <td class="py-2 pr-3 whitespace-nowrap">${status}${pendingReset}</td>
+          <td class="py-2 pr-3 text-gray-600">${escHtml(a.email || '—')}</td>
+          <td class="py-2 pr-3 text-gray-500 whitespace-nowrap">${escHtml(a.last_login_at ? a.last_login_at.slice(0, 16) : '—')}</td>
+          <td class="py-2 text-right whitespace-nowrap">${linkBtn}<button onclick="newInvite(${a.player_id})" class="text-gray-500 hover:underline">New link</button></td>
+        </tr>`;
+      }).join('');
+    }
+
+    function accFlash(text, ok = true) {
+      const el = document.getElementById('acc-status');
+      el.textContent = text;
+      el.className = `text-sm ${ok ? 'text-green-600' : 'text-red-600'}`;
+      clearTimeout(accFlash._t);
+      accFlash._t = setTimeout(() => { el.textContent = ''; }, 4000);
+    }
+
+    async function copyText(text) {
+      try { await navigator.clipboard.writeText(text); return true; }
+      catch (e) { window.prompt('Copy this:', text); return false; }
+    }
+
+    async function copyInvite(playerId) {
+      const a = accountsData.accounts.find(x => x.player_id === playerId);
+      if (!a || !a.invite_token) return;
+      if (await copyText(inviteUrl(a.invite_token))) accFlash(`Copied ${a.player_name}'s link`);
+    }
+
+    async function copyPendingLinks() {
+      const pending = accVisible().filter(a => !a.activated_at && a.invite_token);
+      if (!pending.length) { accFlash('Nobody is waiting for a link', false); return; }
+      const text = pending.map(a => `${a.player_name}: ${inviteUrl(a.invite_token)}`).join('\n');
+      if (await copyText(text)) accFlash(`Copied ${pending.length} links`);
+    }
+
+    async function newInvite(playerId) {
+      const a = accountsData.accounts.find(x => x.player_id === playerId);
+      const msg = a && a.activated_at
+        ? `Create a password-reset link for ${a.player_name}? Their current password keeps working until they use it.`
+        : `Replace ${a ? a.player_name : 'this player'}'s invite link? The old link will stop working.`;
+      if (!confirm(msg)) return;
+      const s = accSession();
+      const res = await fetch(`${API}/auth.php`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${s?.token}` },
+        body: JSON.stringify({ action: 'reset_invite', player_id: playerId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { accFlash(data.error || 'Could not create link', false); return; }
+      a.invite_token = data.invite_token;
+      renderAccounts();
+      if (await copyText(inviteUrl(data.invite_token))) accFlash(`New link for ${a.player_name} copied`);
+    }
+
+    openAccountsTab();
+  </script>
+</body>
+</html>

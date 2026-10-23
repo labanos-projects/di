@@ -1,6 +1,21 @@
 <?php
 // Schema migrations — idempotent, safe to call on every request
 
+// Create a di_accounts row (with an unguessable invite token) for any player
+// that doesn't have one yet. Cheap no-op once everyone has an account.
+function ensure_player_accounts($pdo) {
+    $missing = $pdo->query("
+        SELECT p.id FROM players p
+        LEFT JOIN di_accounts a ON a.player_id = p.id
+        WHERE a.id IS NULL
+    ")->fetchAll(PDO::FETCH_COLUMN);
+    if (!$missing) return;
+    $stmt = $pdo->prepare("INSERT IGNORE INTO di_accounts (player_id, invite_token) VALUES (?, ?)");
+    foreach ($missing as $pid) {
+        $stmt->execute([(int)$pid, bin2hex(random_bytes(32))]);
+    }
+}
+
 function run_migrations($pdo) {
 
     $pdo->exec("CREATE TABLE IF NOT EXISTS players (
@@ -66,6 +81,42 @@ function run_migrations($pdo) {
     try { $pdo->exec("ALTER TABLE tournaments ADD COLUMN legacy TINYINT(1) NOT NULL DEFAULT 0"); } catch (Exception $e) {}
     try { $pdo->exec("ALTER TABLE tournaments ADD COLUMN blue_score_override INT NULL DEFAULT NULL"); } catch (Exception $e) {}
     try { $pdo->exec("ALTER TABLE tournaments ADD COLUMN red_score_override  INT NULL DEFAULT NULL"); } catch (Exception $e) {}
+
+    // ── Player accounts (one login per player) ───────────────────────────
+    // Kept separate from the shared `users` table so DI players get no access
+    // to investtracker / fitness_buddy. email + password_hash stay NULL until
+    // the player opens their invite link and sets them.
+    $pdo->exec("CREATE TABLE IF NOT EXISTS di_accounts (
+        id              INT AUTO_INCREMENT PRIMARY KEY,
+        player_id       INT NOT NULL,
+        email           VARCHAR(200) NULL,
+        password_hash   VARCHAR(255) NULL,
+        invite_token    CHAR(64) NULL,
+        is_admin        TINYINT(1) NOT NULL DEFAULT 0,
+        failed_logins   INT NOT NULL DEFAULT 0,
+        locked_until    DATETIME NULL,
+        activated_at    DATETIME NULL,
+        last_login_at   DATETIME NULL,
+        created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY uniq_acc_player (player_id),
+        UNIQUE KEY uniq_acc_email  (email),
+        UNIQUE KEY uniq_acc_invite (invite_token),
+        CONSTRAINT fk_acc_player FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+    // Login sessions. Only a SHA-256 of the bearer token is stored.
+    $pdo->exec("CREATE TABLE IF NOT EXISTS di_sessions (
+        token_hash  CHAR(64) PRIMARY KEY,
+        account_id  INT NOT NULL,
+        created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        expires_at  DATETIME NOT NULL,
+        KEY idx_sess_account (account_id),
+        CONSTRAINT fk_sess_account FOREIGN KEY (account_id) REFERENCES di_accounts(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+    // Every player gets an account row (with a fresh invite token) — this
+    // also covers players added later via the admin panel.
+    ensure_player_accounts($pdo);
 
     // 2018: Blue 18 – Red 12 (match data not available)
     try {
