@@ -9,7 +9,7 @@ that talk to a shared MySQL database.
 - **Backend:** PHP under `php/`. Each endpoint is a self-contained `*.php` file that `require_once`s `db_connect.php`, returns JSON, and sets permissive CORS.
 - **Database:** MySQL on `labanos.dk`. Shared instance with `fitness_buddy` and `investtracker` (one schema, all tables together). See "Database" below.
 - **Default branch:** `main`.
-- **Deploy:** static files served from GitHub Pages. PHP is served from one.com's web root `/customers/2/3/7/cib30a83y/webroots/www/di` (= `labanos.dk/di`). `.github/workflows/deploy-php.yml` uploads there over SFTP on pushes to `main` that touch `php/`, but **only the files in its `DEPLOY_FILES` list** (currently `auth.php db_migrate.php .htaccess`); the other endpoints are still hand-uploaded live copies. Before 2026-10-23 the workflow uploaded to the SFTP user's home (`users/cib30a83y_ssh/di`), which is not served, so earlier "successful" deploys never went live. Each deploy backs up the live versions to `~/di-backups/<timestamp>/` first.
+- **Deploy:** static files served from GitHub Pages. PHP is served from one.com's web root `/customers/2/3/7/cib30a83y/webroots/www/di` (= `labanos.dk/di`). `.github/workflows/deploy-php.yml` uploads every file in its `DEPLOY_FILES` list there over SFTP on pushes to `main` that touch `php/` — **add new endpoints to that list**. `db_connect.php` (real DB credentials) is never deployed; it's managed by hand on the server. Each deploy first reports which live files differ from the repo (run annotations) and backs up the live versions to `~/di-backups/<timestamp>/`. (Before 2026-10-23 the workflow uploaded to the SFTP user's home, which is not served.)
 
 ## File layout
 - `index.html`, `admin.html` — entry points
@@ -17,7 +17,8 @@ that talk to a shared MySQL database.
 - `app.js`, `components.js`, `constants.js` — shared UI/state
 - `leaderboard.js`, `player.js`, `history.js`, `thisyear.js` — page modules
 - `auth.js` — player login, invite activation (`#invite/<token>`), My account (`#account`)
-- `php/db_connect.php` — shared PDO connection (template, credentials substituted on server)
+- `php/db_connect.php` — shared PDO connection (template; the live copy with real credentials is hand-managed on the server)
+- `php/auth_lib.php` — shared login checks: `require_di_admin($pdo)` / `require_di_account($pdo)`
 - `php/*.php` — REST-ish endpoints (`auth`, `leaderboard`, `matches`, `players`, `roster`, `results`, `year_schedule`, `player_stats`, `pair_suggest`, `pairing_analysis`, `admin`)
 - `migrate/` — one-off Python + SQL scripts that imported historical Excel data. Not part of the runtime; safe to ignore unless re-importing.
 - `TODO.md` — current backlog. Read before suggesting new work.
@@ -37,12 +38,12 @@ Schema lives in `php/db_migrate.php` (idempotent — re-runs are safe).
 ## Conventions
 - PHP endpoints use **PDO** with `utf8mb4`, exception mode, fetch-assoc.
 - All responses are **JSON**; CORS is wide open (`Access-Control-Allow-Origin: *`).
-- Auth: player/admin logins go through `php/auth.php` — bearer token in `Authorization` checked against `di_sessions`; admin routes require `di_accounts.is_admin = 1` (`require_account` / `require_admin` in auth.php). The shared `users.api_token` is investtracker/fitness_buddy's, not DI's. Note: most of `admin.php` is still unauthenticated (client-side password only) — see TODO.
+- Auth: logins go through `php/auth.php`; the session is a bearer token in `Authorization`, checked against `di_sessions`. **Every write route must call `require_di_admin($pdo)`** from `php/auth_lib.php` (admin.php, players.php and matches.php already do); GETs are public. Endpoints that take the header must list `Authorization` in `Access-Control-Allow-Headers`. Frontend: `admin.html` and `accounts.html` log in with a DI account with `is_admin = 1` and share the session in `localStorage['di_session']` with the public site. The shared `users.api_token` is investtracker/fitness_buddy's, not DI's.
 - Frontend is vanilla JS — no framework, no bundler. Keep it that way unless we explicitly agree to introduce one.
 - Don't touch `migrate/` files casually; they were one-off importers.
 
 ## Database — how I (Claude) work with it
-- The DB is shared across all three projects on labanos.dk MySQL. Credentials live in `php/db_connect.php` on the server (filled in from `%%PLACEHOLDERS%%` at deploy time). **Never commit real credentials to this repo.**
+- The DB is shared across all three projects on labanos.dk MySQL. Credentials live only in the hand-managed `php/db_connect.php` on the server (the repo copy has `%%PLACEHOLDERS%%`). **Never commit real credentials to this repo.**
 - For my own ad-hoc access I use a **dedicated MySQL user**, separate from the app user. Connection details are in the user-level global instructions, not in this repo.
 - **Safety rule (I follow this every session):**
   - `SELECT` queries — I run them freely.
