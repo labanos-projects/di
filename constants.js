@@ -1,6 +1,9 @@
 // ─── Constants ───────────────────────────────────────────────────────────────
 const API       = 'https://labanos.dk/di';
-const THIS_YEAR = new Date().getFullYear();
+// The tournament year shown in the first tab (rounds, standings). Set explicitly
+// rather than from the calendar, so the site can switch to next year's event as
+// soon as its roster is ready. Bump this when the next tournament is set up.
+const THIS_YEAR = 2027;
 
 const TEAM = {
   blue: { label: 'Blue', bg: 'bg-blue-600', text: 'text-blue-600', border: 'border-blue-600', hex: '#2563eb' },
