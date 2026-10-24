@@ -14,12 +14,14 @@ that talk to a shared MySQL database.
 ## File layout
 - `index.html`, `admin.html` — entry points
 - `accounts.html` — admin page for player accounts / invite links (server-checked admin login via `php/auth.php`)
+- `shop-admin.html` — admin page for the team shop: settings (allowance, deadline, open), product catalogue, orders, GolfExperten summary + CSV
+- `shop.js` — player shop (`ShopPanel`), shown only on your own profile page when logged in
 - `app.js`, `components.js`, `constants.js` — shared UI/state
 - `leaderboard.js`, `player.js`, `history.js`, `thisyear.js` — page modules
 - `auth.js` — player login, invite activation (`#invite/<token>`), My account (`#account`)
 - `php/db_connect.php` — shared PDO connection (template; the live copy with real credentials is hand-managed on the server)
 - `php/auth_lib.php` — shared login checks: `require_di_admin($pdo)` / `require_di_account($pdo)`
-- `php/*.php` — REST-ish endpoints (`auth`, `leaderboard`, `matches`, `players`, `roster`, `results`, `year_schedule`, `player_stats`, `pair_suggest`, `pairing_analysis`, `admin`)
+- `php/*.php` — REST-ish endpoints (`auth`, `shop`, `leaderboard`, `matches`, `players`, `roster`, `results`, `year_schedule`, `player_stats`, `pair_suggest`, `pairing_analysis`, `admin`)
 - `migrate/` — one-off Python + SQL scripts that imported historical Excel data. Not part of the runtime; safe to ignore unless re-importing.
 - `TODO.md` — current backlog. Read before suggesting new work.
 
@@ -32,13 +34,16 @@ that talk to a shared MySQL database.
 - `roster_assignments` — per-year roster; if a year has no rows it falls back to "all active players"
 - `di_accounts` — one login per player (email, password_hash, invite_token, is_admin). Auto-created for every player by `ensure_player_accounts()`. Deliberately NOT the shared `users` table, so golf players get no access to investtracker/fitness_buddy.
 - `di_sessions` — player login sessions (SHA-256 of the bearer token, 180-day expiry)
+- `shop_config` — per year: `allowance` (DKK, against the discounted price), `deadline` (Danish time; orders lock after it), `is_open` (closed = admins-only preview)
+- `shop_products` — catalogue per year: `price` (our discounted price) + `list_price` (shown struck through), `sizes` (comma list, NULL = one size), `team_colored`, `has_logo`, `max_qty`, `active`
+- `shop_orders` / `shop_order_items` — one order per player per year (`draft`/`submitted`), lines with size, qty and a `unit_price` snapshot. Anything above the allowance is billed to the player by GolfExperten; unused allowance is lost. Only rostered players can order.
 
 Schema lives in `php/db_migrate.php` (idempotent — re-runs are safe).
 
 ## Conventions
 - PHP endpoints use **PDO** with `utf8mb4`, exception mode, fetch-assoc.
 - All responses are **JSON**; CORS is wide open (`Access-Control-Allow-Origin: *`).
-- Auth: logins go through `php/auth.php`; the session is a bearer token in `Authorization`, checked against `di_sessions`. **Every write route must call `require_di_admin($pdo)`** from `php/auth_lib.php` (admin.php, players.php and matches.php already do); GETs are public. Endpoints that take the header must list `Authorization` in `Access-Control-Allow-Headers`. Frontend: `admin.html` and `accounts.html` log in with a DI account with `is_admin = 1` and share the session in `localStorage['di_session']` with the public site. The shared `users.api_token` is investtracker/fitness_buddy's, not DI's.
+- Auth: logins go through `php/auth.php`; the session is a bearer token in `Authorization`, checked against `di_sessions`. **Every write route must check the session** via `php/auth_lib.php`: `require_di_admin($pdo)` for admin writes (admin.php, players.php, matches.php, shop.php admin actions), `require_di_account($pdo)` where a player writes their own data (shop.php `save_order`). Public GETs stay open; anything personal (shop orders) requires a session. Endpoints that take the header must list `Authorization` in `Access-Control-Allow-Headers`. Frontend: `admin.html` and `accounts.html` log in with a DI account with `is_admin = 1` and share the session in `localStorage['di_session']` with the public site. The shared `users.api_token` is investtracker/fitness_buddy's, not DI's.
 - Frontend is vanilla JS — no framework, no bundler. Keep it that way unless we explicitly agree to introduce one.
 - Don't touch `migrate/` files casually; they were one-off importers.
 

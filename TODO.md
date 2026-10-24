@@ -27,8 +27,11 @@
 - [x] Link to `accounts.html` from `admin.html`
 - [x] Organiser account marked as admin (Peter Bugge)
 - [ ] Send invite links to the 2027 roster
-- [ ] Logged-in player profile page (sizes / details for polo order)
-- [ ] Polo ordering
+- [x] Team shop: allowance per year, team-colour products with sizes, player orders on own profile, deadline lock
+- [x] Shop admin page (`shop-admin.html`): settings, catalogue, order status, GolfExperten summary + CSV
+- [ ] Replace the placeholder 2027 products with GolfExperten's real products, prices and pictures
+- [ ] Set the 2027 order deadline, then open the shop and send invite links
+- [ ] Send the summary/CSV to GolfExperten after the deadline
 - [x] admin.html uses the DI admin login; admin.php / players.php / matches.php writes require an admin session
 
 ## Deploy
