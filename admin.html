@@ -8,21 +8,23 @@
 </head>
 <body class="bg-gray-100 min-h-screen">
 
-  <!-- Password Gate -->
+  <!-- Login Gate (DI admin account, checked by php/auth.php) -->
   <div id="auth-gate" class="flex items-center justify-center min-h-screen">
     <div class="bg-white rounded-2xl shadow-lg p-8 w-80">
       <div class="text-center mb-6">
         <div class="text-4xl mb-2">⛳</div>
         <h1 class="text-2xl font-bold">DI Admin</h1>
-        <p class="text-gray-500 text-sm mt-1">Damsgaard Invitational</p>
+        <p class="text-gray-500 text-sm mt-1">Log in with your DI account</p>
       </div>
-      <input id="pw-input" type="password" placeholder="Password"
+      <input id="login-email" type="email" placeholder="Email" autocomplete="email"
+        class="w-full border rounded-lg px-3 py-2 mb-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+      <input id="pw-input" type="password" placeholder="Password" autocomplete="current-password"
         class="w-full border rounded-lg px-3 py-2 mb-3 focus:outline-none focus:ring-2 focus:ring-blue-500">
-      <button onclick="checkPassword()"
+      <button onclick="adminLogin()"
         class="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-4 py-2 font-semibold transition">
-        Enter
+        Log in
       </button>
-      <p id="pw-error" class="text-red-500 text-sm mt-2 text-center hidden">Wrong password</p>
+      <p id="pw-error" class="text-red-500 text-sm mt-2 text-center hidden"></p>
     </div>
   </div>
 
@@ -33,6 +35,9 @@
         <div class="flex items-center gap-2">
           <span class="text-2xl">⛳</span>
           <h1 class="text-xl font-bold">DI Admin</h1>
+          <span id="admin-whoami" class="text-xs text-gray-400 ml-2"></span>
+          <a href="accounts.html" class="text-xs text-blue-600 hover:underline ml-2">Accounts</a>
+          <button onclick="adminLogout()" class="text-xs text-gray-500 hover:text-gray-700 underline ml-2">Log out</button>
         </div>
         <div class="flex gap-1">
           <button onclick="showTab('matches')" id="tab-matches"
@@ -396,7 +401,6 @@
   </div>
 
   <script>
-    const ADMIN_PASSWORD = 'damsgaard';
     const API = 'https://labanos.dk/di';
 
     let allPlayers   = [];
@@ -416,18 +420,108 @@
     let rosterLoadedYear = null;
 
     // ── Auth ──────────────────────────────────────────────────────────────────
-    function checkPassword() {
-      if (document.getElementById('pw-input').value === ADMIN_PASSWORD) {
-        document.getElementById('auth-gate').classList.add('hidden');
-        document.getElementById('admin-app').classList.remove('hidden');
-        init();
-      } else {
-        document.getElementById('pw-error').classList.remove('hidden');
+    // Logs in with a DI player account that has is_admin = 1 (php/auth.php).
+    // The session is shared with the public site and accounts.html via
+    // localStorage 'di_session', and sent as a Bearer token on every write.
+    const SESSION_KEY = 'di_session';
+
+    function getSession() {
+      try { return JSON.parse(localStorage.getItem(SESSION_KEY)) || null; } catch (e) { return null; }
+    }
+    function setSession(s) {
+      try { s ? localStorage.setItem(SESSION_KEY, JSON.stringify(s)) : localStorage.removeItem(SESSION_KEY); } catch (e) {}
+    }
+    // Headers for POSTs to the API: JSON + the admin's session token.
+    function authHeaders() {
+      const s = getSession();
+      const h = { 'Content-Type': 'application/json' };
+      if (s && s.token) h.Authorization = `Bearer ${s.token}`;
+      return h;
+    }
+
+    function showGate(msg) {
+      document.getElementById('admin-app').classList.add('hidden');
+      document.getElementById('auth-gate').classList.remove('hidden');
+      const err = document.getElementById('pw-error');
+      err.textContent = msg || '';
+      err.classList.toggle('hidden', !msg);
+    }
+
+    let appStarted = false;
+    function showApp(account) {
+      document.getElementById('auth-gate').classList.add('hidden');
+      document.getElementById('admin-app').classList.remove('hidden');
+      document.getElementById('admin-whoami').textContent = account?.player_name || '';
+      if (!appStarted) { appStarted = true; init(); }
+    }
+
+    // On load: reuse an existing session if it belongs to an admin.
+    async function checkSession() {
+      const s = getSession();
+      if (!s || !s.token) { showGate(); return; }
+      try {
+        const res = await fetch(`${API}/auth.php?action=me`, { headers: { Authorization: `Bearer ${s.token}` } });
+        if (res.status === 401) { setSession(null); showGate(); return; }
+        const account = await res.json();
+        if (!res.ok) { showGate(account.error || 'Could not check login'); return; }
+        setSession({ token: s.token, account });
+        if (!account.is_admin) { showGate(`${account.player_name} is not an admin.`); return; }
+        showApp(account);
+      } catch (e) {
+        showGate('Could not reach the server');
+      }
+    }
+
+    async function adminLogin() {
+      const email    = document.getElementById('login-email').value;
+      const password = document.getElementById('pw-input').value;
+      try {
+        const res = await fetch(`${API}/auth.php`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'login', email, password }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) { showGate(data.error || 'Login failed'); return; }
+        setSession({ token: data.token, account: data.account });
+        document.getElementById('pw-input').value = '';
+        if (!data.account.is_admin) { showGate(`${data.account.player_name} is not an admin.`); return; }
+        showApp(data.account);
+      } catch (e) {
+        showGate('Could not reach the server');
       }
     }
     document.getElementById('pw-input').addEventListener('keydown', e => {
-      if (e.key === 'Enter') checkPassword();
+      if (e.key === 'Enter') adminLogin();
     });
+
+    async function adminLogout() {
+      const s = getSession();
+      if (s && s.token) {
+        try {
+          await fetch(`${API}/auth.php`, {
+            method: 'POST', headers: authHeaders(),
+            body: JSON.stringify({ action: 'logout' }),
+          });
+        } catch (e) {}
+      }
+      setSession(null);
+      location.reload();
+    }
+
+    // If a write comes back 401/403 (session expired / not admin), send the user to the login gate.
+    const _fetch = window.fetch.bind(window);
+    window.fetch = async (...args) => {
+      const res = await _fetch(...args);
+      const url = String(args[0] && args[0].url || args[0]);
+      const method = (args[1] && args[1].method || 'GET').toUpperCase();
+      if (method !== 'GET' && url.startsWith(API) && !url.includes('/auth.php') && (res.status === 401 || res.status === 403)) {
+        const body = await res.clone().json().catch(() => ({}));
+        showGate(body.error === 'Admin only' ? 'This account is not an admin.' : (body.error || 'Please log in again.'));
+      }
+      return res;
+    };
+
+    checkSession();
 
     // ── Tabs ──────────────────────────────────────────────────────────────────
     function showTab(name) {
@@ -496,7 +590,7 @@
       status.textContent = 'Creating…'; status.className = 'text-sm text-gray-400';
       try {
         const res  = await fetch(`${API}/admin.php`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          method: 'POST', headers: authHeaders(),
           body: JSON.stringify({ action: 'add_year', year: yearVal, rounds }),
         });
         const data = await res.json();
@@ -656,7 +750,7 @@
       status.textContent = 'Saving…'; status.className = 'text-sm text-gray-400';
       try {
         const res = await fetch(`${API}/admin.php`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          method: 'POST', headers: authHeaders(),
           body: JSON.stringify({ action: 'set_roster', year, player_ids: ids }),
         });
         const data = await res.json();
@@ -836,7 +930,7 @@
       btn.disabled = true;
       try {
         const res = await fetch(`${API}/admin.php`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          method: 'POST', headers: authHeaders(),
           body: JSON.stringify({ action: 'delete_match', match_id: parseInt(matchId) }),
         });
         const data = await res.json();
@@ -893,7 +987,7 @@
       status.textContent = 'Saving…'; status.className = 'save-status text-sm text-gray-400';
       try {
         const res = await fetch(`${API}/admin.php`, {
-          method:'POST', headers:{'Content-Type':'application/json'},
+          method:'POST', headers: authHeaders(),
           body: JSON.stringify({ year:currentYear, round_number:currentRound, match_number:matchNo, winner, ups, players }),
         });
         const data = await res.json();
@@ -1009,7 +1103,7 @@
       btn.disabled = true; status.textContent = 'Saving…';
       try {
         const res = await fetch(`${API}/admin.php`, {
-          method:'POST', headers:{'Content-Type':'application/json'},
+          method:'POST', headers: authHeaders(),
           body: JSON.stringify({ action:'update_player', id, name, team }),
         });
         const data = await res.json();
@@ -1028,7 +1122,7 @@
       btn.disabled = true;
       try {
         const res = await fetch(`${API}/admin.php`, {
-          method:'POST', headers:{'Content-Type':'application/json'},
+          method:'POST', headers: authHeaders(),
           body: JSON.stringify({ action:'merge_players', keep_id:keepId, merge_id:mergeId }),
         });
         const data = await res.json();
@@ -1040,7 +1134,7 @@
     async function deletePlayer(id, name) {
       if (!confirm(`Delete "${name}"?\n\nThis only works if they have no match results.`)) return;
       const res = await fetch(`${API}/admin.php`, {
-        method:'POST', headers:{'Content-Type':'application/json'},
+        method:'POST', headers: authHeaders(),
         body: JSON.stringify({ action:'delete_player', id }),
       });
       const data = await res.json();
@@ -1056,7 +1150,7 @@
       status.textContent = 'Adding…'; status.className = 'text-sm text-gray-400';
       try {
         const res = await fetch(`${API}/admin.php`, {
-          method:'POST', headers:{'Content-Type':'application/json'},
+          method:'POST', headers: authHeaders(),
           body: JSON.stringify({ action:'add_player', name, team }),
         });
         const data = await res.json();
@@ -1353,7 +1447,6 @@
       const topPct = Math.round(top.win_probability * 100);
       const topNames = top.players.map(p => p.name).join(' & ');
       const isSingles = data.format === 'singles';
-
       const heroEmoji = isWorst ? '🪶' : '🏆';
       const heroLabel = isWorst ? `Weakest ${oppName}` : `Strongest ${oppName}`;
       const heroSuffix = isSingles ? 'pick' : 'pair';
