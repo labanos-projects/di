@@ -24,15 +24,40 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Install sshpass
+        run: sudo apt-get install -y sshpass
+
+      - name: Compare live files with repo (reported as annotations)
+        run: |
+          # Runs before credential injection, so repo files are pristine. db_connect.php is
+          # skipped: live has real credentials, the repo has placeholders.
+          sshpass -p "${{ secrets.SFTP_PASS }}" ssh -o BatchMode=no \
+            -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+            -p ${{ secrets.SFTP_PORT }} "${{ secrets.SFTP_USER }}@${{ secrets.SFTP_HOST }}" \
+            "cd '$LIVE_DIR' && sha256sum *.php .htaccess" > live.sha
+          SAME=""; DIFF=""; ONLY_LIVE=""; ONLY_REPO=""
+          for f in php/*.php php/.htaccess; do
+            b=$(basename "$f"); [ "$b" = "db_connect.php" ] && continue
+            live=$(awk -v n="$b" '$2==n {print $1}' live.sha)
+            repo=$(sha256sum "$f" | cut -d' ' -f1)
+            if [ -z "$live" ]; then ONLY_REPO="$ONLY_REPO $b"
+            elif [ "$live" = "$repo" ]; then SAME="$SAME $b"
+            else DIFF="$DIFF $b"; fi
+          done
+          for b in $(awk '{print $2}' live.sha); do
+            [ -e "php/$b" ] || ONLY_LIVE="$ONLY_LIVE $b"
+          done
+          echo "::notice title=Live = repo::${SAME:- none}"
+          echo "::notice title=Live differs from repo::${DIFF:- none}"
+          echo "::notice title=Only in repo (not live)::${ONLY_REPO:- none}"
+          echo "::notice title=Only live (not in repo)::${ONLY_LIVE:- none}"
+
       - name: Inject DB credentials
         run: |
           for f in $DEPLOY_FILES; do
             [ "${f##*.}" = "php" ] || continue
             sed -i "s|%%DB_HOST%%|${{ secrets.DB_HOST }}|g; s|%%DB_NAME%%|${{ secrets.DB_NAME }}|g; s|%%DB_USER%%|${{ secrets.DB_USER }}|g; s|%%DB_PASS%%|${{ secrets.DB_PASS }}|g" "php/$f"
           done
-
-      - name: Install sshpass
-        run: sudo apt-get install -y sshpass
 
       - name: Back up live files
         run: |
