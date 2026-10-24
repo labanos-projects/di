@@ -301,6 +301,7 @@ function StatsCard({ data }) {
 // ─── Main player view ───────────────────────────────────────────────────────
 
 function PlayerView({ playerId, onBack }) {
+  const session                 = useSession();
   const [data, setData]         = React.useState(null);
   const [error, setError]       = React.useState(null);
   const [expandedYear, setExpY] = React.useState(null);
@@ -340,6 +341,10 @@ function PlayerView({ playerId, onBack }) {
           <div><div className="text-2xl font-black mono">{fmtAvg(data.avg_points)}</div><div className="text-xs opacity-70">Avg</div></div>
         </div>
       </div>
+
+      {/* Team shop — only on your own profile when logged in */}
+      {session && session.account && session.account.player_id === playerId &&
+        <ShopPanel year={THIS_YEAR} session={session} />}
 
       {/* W/H/L summary */}
       <div className="bg-white rounded-2xl shadow-sm p-4 mb-4 flex justify-around text-center">
