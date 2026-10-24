@@ -17,7 +17,7 @@ env:
   DEPLOY_FILES: >-
     auth_lib.php auth.php db_migrate.php admin.php players.php matches.php roster.php
     results.php leaderboard.php year_schedule.php player_stats.php pair_suggest.php
-    pairing_analysis.php .htaccess
+    pairing_analysis.php shop.php .htaccess
 
 jobs:
   deploy:

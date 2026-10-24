@@ -229,7 +229,7 @@ function AccountView({ session, onOpenProfile, onLoggedOut }) {
         <div className="flex gap-2">
           <button onClick={() => onOpenProfile(a.player_id)}
             className="flex-1 bg-slate-900 hover:bg-slate-700 text-white rounded-lg px-4 py-2 text-sm font-semibold transition">
-            My player profile
+            My profile &amp; {THIS_YEAR} shop
           </button>
           <button onClick={async () => { await logout(); onLoggedOut(); }}
             className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 border border-slate-300 hover:bg-slate-50 transition">

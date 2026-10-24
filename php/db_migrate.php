@@ -118,6 +118,64 @@ function run_migrations($pdo) {
     // also covers players added later via the admin panel.
     ensure_player_accounts($pdo);
 
+    // ── Player shop (team merchandise ordered via GolfExperten) ─────────
+    // One config row per tournament year: allowance (DKK, against the discounted
+    // price), order deadline, and whether players can see the shop yet.
+    $pdo->exec("CREATE TABLE IF NOT EXISTS shop_config (
+        year        INT PRIMARY KEY,
+        allowance   INT NOT NULL DEFAULT 300,
+        deadline    DATETIME NULL,
+        is_open     TINYINT(1) NOT NULL DEFAULT 0,
+        updated_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+    // Catalogue per year. price = our discounted price (what counts against the
+    // allowance and what GolfExperten bills); list_price is shown struck through.
+    // sizes: comma-separated (e.g. 'S,M,L,XL') or NULL for one-size items.
+    // team_colored: delivered in the player's team colour (blue/red).
+    $pdo->exec("CREATE TABLE IF NOT EXISTS shop_products (
+        id            INT AUTO_INCREMENT PRIMARY KEY,
+        year          INT NOT NULL,
+        name          VARCHAR(100) NOT NULL,
+        description   VARCHAR(500) NULL,
+        list_price    INT NULL,
+        price         INT NOT NULL,
+        sizes         VARCHAR(200) NULL,
+        team_colored  TINYINT(1) NOT NULL DEFAULT 1,
+        has_logo      TINYINT(1) NOT NULL DEFAULT 1,
+        image_url     VARCHAR(500) NULL,
+        max_qty       INT NOT NULL DEFAULT 5,
+        sort_order    INT NOT NULL DEFAULT 0,
+        active        TINYINT(1) NOT NULL DEFAULT 1,
+        KEY idx_shop_products_year (year)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+    // One order per player per year. status: draft until the player submits.
+    $pdo->exec("CREATE TABLE IF NOT EXISTS shop_orders (
+        id            INT AUTO_INCREMENT PRIMARY KEY,
+        year          INT NOT NULL,
+        player_id     INT NOT NULL,
+        status        ENUM('draft','submitted') NOT NULL DEFAULT 'draft',
+        team          ENUM('blue','red') NOT NULL,
+        submitted_at  DATETIME NULL,
+        updated_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY uniq_shop_order (year, player_id),
+        CONSTRAINT fk_shop_order_player FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+    // Lines on an order. unit_price is a snapshot of products.price when saved.
+    $pdo->exec("CREATE TABLE IF NOT EXISTS shop_order_items (
+        id          INT AUTO_INCREMENT PRIMARY KEY,
+        order_id    INT NOT NULL,
+        product_id  INT NOT NULL,
+        size        VARCHAR(20) NOT NULL DEFAULT '',
+        qty         INT NOT NULL,
+        unit_price  INT NOT NULL,
+        UNIQUE KEY uniq_shop_line (order_id, product_id, size),
+        CONSTRAINT fk_shop_item_order   FOREIGN KEY (order_id)   REFERENCES shop_orders(id)   ON DELETE CASCADE,
+        CONSTRAINT fk_shop_item_product FOREIGN KEY (product_id) REFERENCES shop_products(id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
     // 2018: Blue 18 – Red 12 (match data not available)
     try {
         $pdo->exec("INSERT INTO tournaments (year, legacy, blue_score_override, red_score_override)
