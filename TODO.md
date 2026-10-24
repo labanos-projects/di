@@ -14,7 +14,7 @@
 - [ ] Current year live round-by-round view
 
 ## Phase 3 — Admin Panel
-- [ ] Auth (login)
+- [x] Auth (login) — DI admin accounts
 - [ ] Manage players + team assignments
 - [ ] Set up tournament years
 - [ ] Create round pairings
@@ -24,15 +24,16 @@
 - [x] One account per player (`di_accounts`), auto-created for every player incl. new ones
 - [x] Invite link → player sets own email + password; login / logout / change password
 - [x] Admin page `accounts.html`: status per player, copy invite links, new/reset links
-- [ ] Link to `accounts.html` from `admin.html` (or fold it in when admin.php gets real auth)
+- [x] Link to `accounts.html` from `admin.html`
 - [x] Organiser account marked as admin (Peter Bugge)
 - [ ] Send invite links to the 2027 roster
 - [ ] Logged-in player profile page (sizes / details for polo order)
 - [ ] Polo ordering
-- [ ] Replace the client-side admin password with the new admin login for all admin.php writes
+- [x] admin.html uses the DI admin login; admin.php / players.php / matches.php writes require an admin session
 
 ## Deploy
-- [ ] Verify the DB_* GitHub secrets against the live `db_connect.php`, then add the remaining endpoints to `DEPLOY_FILES` in `deploy-php.yml` so the live folder matches the repo
+- [x] Deploy all endpoints except `db_connect.php` (live verified identical to repo first)
+- [ ] The DB_* GitHub secrets are now unused (db_connect.php is hand-managed) — delete them or verify them if CI should ever manage db_connect.php
 - [ ] Remove the dead copy in the SFTP user's home (`users/cib30a83y_ssh/di`, incl. a stray `account.php` from debugging)
 
 ## Phase 4 — Polish

@@ -11,11 +11,13 @@ env:
   # labanos.dk is served from webroots/www on one.com. The SFTP user's home
   # (users/cib30a83y_ssh) is NOT served — uploads there never go live.
   LIVE_DIR: /customers/2/3/7/cib30a83y/webroots/www/di
-  # Files deployed to LIVE_DIR. Deliberately only the player-accounts files for now:
-  # the other endpoints (incl. db_connect.php, which gets DB credentials from secrets)
-  # are still the hand-uploaded live copies, and the secrets have never been verified
-  # against the live site. Add files here once that is checked.
-  DEPLOY_FILES: auth.php db_migrate.php .htaccess
+  # Files deployed to LIVE_DIR: every endpoint except db_connect.php. db_connect.php holds
+  # the real DB credentials and is managed by hand on the server; it is never uploaded.
+  # (On 2026-10-24 all live files were verified byte-identical to the repo before this.)
+  DEPLOY_FILES: >-
+    auth_lib.php auth.php db_migrate.php admin.php players.php matches.php roster.php
+    results.php leaderboard.php year_schedule.php player_stats.php pair_suggest.php
+    pairing_analysis.php .htaccess
 
 jobs:
   deploy:
@@ -29,8 +31,7 @@ jobs:
 
       - name: Compare live files with repo (reported as annotations)
         run: |
-          # Runs before credential injection, so repo files are pristine. db_connect.php is
-          # skipped: live has real credentials, the repo has placeholders.
+          # db_connect.php is skipped: live has real credentials, the repo has placeholders.
           sshpass -p "${{ secrets.SFTP_PASS }}" ssh -o BatchMode=no \
             -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
             -p ${{ secrets.SFTP_PORT }} "${{ secrets.SFTP_USER }}@${{ secrets.SFTP_HOST }}" \
@@ -51,13 +52,6 @@ jobs:
           echo "::notice title=Live differs from repo::${DIFF:- none}"
           echo "::notice title=Only in repo (not live)::${ONLY_REPO:- none}"
           echo "::notice title=Only live (not in repo)::${ONLY_LIVE:- none}"
-
-      - name: Inject DB credentials
-        run: |
-          for f in $DEPLOY_FILES; do
-            [ "${f##*.}" = "php" ] || continue
-            sed -i "s|%%DB_HOST%%|${{ secrets.DB_HOST }}|g; s|%%DB_NAME%%|${{ secrets.DB_NAME }}|g; s|%%DB_USER%%|${{ secrets.DB_USER }}|g; s|%%DB_PASS%%|${{ secrets.DB_PASS }}|g" "php/$f"
-          done
 
       - name: Back up live files
         run: |

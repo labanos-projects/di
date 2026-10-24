@@ -4,11 +4,12 @@
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type');
+header('Access-Control-Allow-Headers: Content-Type, Authorization');
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(204); exit; }
 
 require_once __DIR__ . '/db_connect.php';
 require_once __DIR__ . '/db_migrate.php';
+require_once __DIR__ . '/auth_lib.php';
 run_migrations($pdo);
 
 $method = $_SERVER['REQUEST_METHOD'];
@@ -42,6 +43,7 @@ if ($method === 'GET') {
 }
 
 if ($method === 'POST') {
+    require_di_admin($pdo);   // writes need a logged-in DI admin
     $data      = json_decode(file_get_contents('php://input'), true);
     $matchId   = (int)($data['match_id']   ?? 0);
     $playerId  = (int)($data['player_id']  ?? 0);

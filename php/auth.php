@@ -28,6 +28,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(204); exit; }
 
 require_once __DIR__ . '/db_connect.php';
 require_once __DIR__ . '/db_migrate.php';
+require_once __DIR__ . '/auth_lib.php';
 run_migrations($pdo);
 
 const SESSION_DAYS     = 180;  // stay logged in through the season
@@ -39,18 +40,6 @@ function out($data, $code = 200) {
     http_response_code($code);
     echo json_encode($data);
     exit;
-}
-
-function bearer_token() {
-    $h = $_SERVER['HTTP_AUTHORIZATION']
-      ?? $_SERVER['REDIRECT_HTTP_AUTHORIZATION']
-      ?? '';
-    if (!$h && function_exists('getallheaders')) {
-        foreach (getallheaders() as $k => $v) {
-            if (strcasecmp($k, 'Authorization') === 0) { $h = $v; break; }
-        }
-    }
-    return preg_match('/^Bearer\s+([a-f0-9]{64})$/i', trim($h), $m) ? strtolower($m[1]) : null;
 }
 
 function create_session($pdo, $account_id) {
@@ -81,26 +70,9 @@ function account_payload($pdo, $account_id) {
     return $row;
 }
 
-// Returns the logged-in account row, or exits 401.
-function require_account($pdo) {
-    $token = bearer_token();
-    if (!$token) out(['error' => 'Not logged in'], 401);
-    $stmt = $pdo->prepare("
-        SELECT a.* FROM di_sessions s
-        JOIN di_accounts a ON a.id = s.account_id
-        WHERE s.token_hash = ? AND s.expires_at > NOW()
-    ");
-    $stmt->execute([hash('sha256', $token)]);
-    $acc = $stmt->fetch();
-    if (!$acc) out(['error' => 'Session expired — please log in again'], 401);
-    return $acc;
-}
-
-function require_admin($pdo) {
-    $acc = require_account($pdo);
-    if (!(int)$acc['is_admin']) out(['error' => 'Admin only'], 403);
-    return $acc;
-}
+// Thin wrappers over auth_lib.php (kept for readability below).
+function require_account($pdo) { return require_di_account($pdo); }
+function require_admin($pdo)   { return require_di_admin($pdo); }
 
 function clean_email($email) {
     $email = strtolower(trim((string)$email));
